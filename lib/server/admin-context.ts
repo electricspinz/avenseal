@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getAdminCookieName, readAdminSession } from "@/lib/server/admin-auth";
+import { resolvePublicOrganization } from "@/lib/server/organization";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 
 export type AdminOrganizationContext = {
@@ -30,11 +31,13 @@ export async function requireAdminOrganizationContext(): Promise<AdminOrganizati
     userId = profiles?.[0]?.id ? String(profiles[0].id) : undefined;
   }
   if (!userId) throw new Error("Admin user profile was not found.");
+  const organization = await resolvePublicOrganization();
 
   const { data, error } = await supabase
     .from("organization_users")
     .select("organization_id,role,status")
     .eq("user_id", userId)
+    .eq("organization_id", organization.id)
     .in("role", ["owner", "admin"])
     .eq("status", "active")
     .limit(1);
@@ -45,7 +48,7 @@ export async function requireAdminOrganizationContext(): Promise<AdminOrganizati
   return {
     userId,
     email: session.email,
-    organizationId: String(membership.organization_id),
+    organizationId: organization.id,
     role: String(membership.role) as "owner" | "admin"
   };
 }

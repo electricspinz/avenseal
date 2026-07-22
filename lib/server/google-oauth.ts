@@ -138,19 +138,17 @@ export async function consumeGoogleOAuthState(input: { state: string; organizati
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("google_oauth_states")
-    .select("id,organization_id,user_id,redirect_path,expires_at,used_at")
+    .update({ used_at: new Date().toISOString() })
     .eq("state_hash", stateHash)
+    .eq("organization_id", input.organizationId)
+    .eq("user_id", input.userId)
+    .is("used_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .select("id,organization_id,user_id,redirect_path,expires_at,used_at")
     .limit(1);
   if (error) throw error;
   const row = data?.[0];
-  assertGoogleOAuthState(row as GoogleOAuthStateRecord | undefined, input);
-
-  const { error: updateError } = await supabase
-    .from("google_oauth_states")
-    .update({ used_at: new Date().toISOString() })
-    .eq("id", row.id)
-    .is("used_at", null);
-  if (updateError) throw updateError;
+  if (!row) throw new Error("Invalid, expired, or already used Google OAuth state.");
   return { redirectPath: String(row.redirect_path) };
 }
 
@@ -235,7 +233,7 @@ function mapStatus(row: GoogleConnectionRow | null): GoogleConnectionStatus {
 export async function getGoogleConnectionStatus(organizationId: string) {
   const { data, error } = await getSupabaseAdmin()
     .from("google_oauth_connections")
-    .select("id,organization_id,google_account_id,google_account_email,encrypted_refresh_token,refresh_token_iv,refresh_token_tag,encrypted_access_token,access_token_iv,access_token_tag,access_token_expires_at,scopes,status,last_successful_refresh_at,last_verified_at,last_error_category,last_error_message,disconnected_at,revoked_at,created_at,updated_at")
+    .select("id,organization_id,google_account_id,google_account_email,access_token_expires_at,scopes,status,last_successful_refresh_at,last_verified_at,last_error_category,last_error_message,disconnected_at,revoked_at,created_at,updated_at")
     .eq("organization_id", organizationId)
     .eq("provider", "google")
     .limit(1);
@@ -373,12 +371,20 @@ export async function getValidGoogleAccessToken(organizationId: string, fetcher:
       refresh_token: refreshToken
     }), fetcher);
     const accessToken = encryptToken(tokens.access_token);
+    const rotatedRefreshToken = tokens.refresh_token ? encryptToken(tokens.refresh_token) : null;
     const expires = tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1000).toISOString() : null;
     await supabase.from("google_oauth_connections").update({
       encrypted_access_token: accessToken.ciphertext,
       access_token_iv: accessToken.iv,
       access_token_tag: accessToken.tag,
       access_token_expires_at: expires,
+      ...(rotatedRefreshToken
+        ? {
+            encrypted_refresh_token: rotatedRefreshToken.ciphertext,
+            refresh_token_iv: rotatedRefreshToken.iv,
+            refresh_token_tag: rotatedRefreshToken.tag
+          }
+        : {}),
       status: "connected",
       last_successful_refresh_at: new Date().toISOString(),
       last_error_category: null,
@@ -401,7 +407,11 @@ export function isRevokedGoogleGrant(error: unknown) {
 }
 
 export async function revokeGoogleToken(token: string, fetcher: Fetcher = fetch) {
-  await fetcher(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST" }).catch(() => undefined);
+  await fetcher("https://oauth2.googleapis.com/revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ token })
+  }).catch(() => undefined);
 }
 
 export async function disconnectGoogleConnection(organizationId: string, fetcher: Fetcher = fetch) {

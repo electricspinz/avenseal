@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   requireAdminOrganizationContext: vi.fn(),
@@ -37,6 +38,7 @@ describe("Google OAuth admin routes", () => {
     process.env.GOOGLE_CLIENT_ID = "client-id";
     process.env.GOOGLE_CLIENT_SECRET = "client-secret";
     process.env.GOOGLE_OAUTH_REDIRECT_URI = "http://localhost:3000/api/admin/integrations/google/callback";
+    process.env.GOOGLE_TOKEN_ENCRYPTION_KEY = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
     mocks.requireAdminOrganizationContext.mockRejectedValue(new Error("No access"));
     const { GET } = await import("@/app/api/admin/integrations/google/connect/route");
 
@@ -51,6 +53,7 @@ describe("Google OAuth admin routes", () => {
     process.env.GOOGLE_CLIENT_ID = "client-id";
     process.env.GOOGLE_CLIENT_SECRET = "client-secret";
     process.env.GOOGLE_OAUTH_REDIRECT_URI = "http://localhost:3000/api/admin/integrations/google/callback";
+    process.env.GOOGLE_TOKEN_ENCRYPTION_KEY = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
     mocks.requireAdminOrganizationContext.mockResolvedValue({ organizationId: "org-1", userId: "user-1" });
     mocks.createGoogleOAuthState.mockResolvedValue("state-value");
     mocks.buildGoogleAuthorizationUrl.mockReturnValue(new URL("https://accounts.google.com/o/oauth2/v2/auth?state=state-value"));
@@ -67,9 +70,23 @@ describe("Google OAuth admin routes", () => {
     mocks.requireAdminOrganizationContext.mockRejectedValue(new Error("No access"));
     const { POST } = await import("@/app/api/admin/integrations/google/disconnect/route");
 
-    const response = await POST();
+    const response = await POST(new NextRequest("http://localhost:3000/api/admin/integrations/google/disconnect", { method: "POST" }));
 
     expect(response.headers.get("location")).toBe("http://localhost:3000/admin/settings/integrations?google=unauthorized");
+    expect(mocks.disconnectGoogleConnection).not.toHaveBeenCalled();
+  });
+
+  it("rejects cross-origin disconnect attempts before service-role work", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+    const { POST } = await import("@/app/api/admin/integrations/google/disconnect/route");
+
+    const response = await POST(new NextRequest("http://localhost:3000/api/admin/integrations/google/disconnect", {
+      method: "POST",
+      headers: { origin: "https://evil.example" }
+    }));
+
+    expect(response.status).toBe(403);
+    expect(mocks.requireAdminOrganizationContext).not.toHaveBeenCalled();
     expect(mocks.disconnectGoogleConnection).not.toHaveBeenCalled();
   });
 });

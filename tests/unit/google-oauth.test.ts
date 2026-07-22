@@ -8,6 +8,7 @@ import {
   fetchGoogleUserInfo,
   googleCalendarScopes,
   isRevokedGoogleGrant,
+  revokeGoogleToken,
   resolveRefreshTokenForStorage
 } from "@/lib/server/google-oauth";
 
@@ -98,6 +99,19 @@ describe("Google OAuth provider calls", () => {
   it("classifies revoked grants separately from temporary errors", () => {
     expect(isRevokedGoogleGrant(new Error("invalid_grant: revoked"))).toBe(true);
     expect(isRevokedGoogleGrant(new Error("temporarily_unavailable"))).toBe(false);
+  });
+
+  it("revokes tokens in the request body rather than the URL", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+
+    await revokeGoogleToken("refresh-token-secret", fetcher);
+
+    expect(fetcher).toHaveBeenCalledWith("https://oauth2.googleapis.com/revoke", expect.objectContaining({
+      method: "POST",
+      body: expect.any(URLSearchParams)
+    }));
+    const [, init] = fetcher.mock.calls[0];
+    expect(String(init.body)).toBe("token=refresh-token-secret");
   });
 
   it("preserves an existing refresh token when Google omits a new one", () => {

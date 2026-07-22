@@ -6,7 +6,9 @@ create table if not exists google_oauth_states (
   redirect_path text not null default '/admin/settings/integrations',
   expires_at timestamptz not null,
   used_at timestamptz,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint google_oauth_states_redirect_path_check
+    check (redirect_path ~ '^/[A-Za-z0-9/_?=&.-]*$' and redirect_path !~ '^//')
 );
 
 create index if not exists google_oauth_states_org_user_idx
@@ -39,7 +41,21 @@ create table if not exists google_oauth_connections (
   revoked_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (organization_id, provider)
+  unique (organization_id, provider),
+  constraint google_oauth_refresh_token_triplet_check
+    check (
+      (encrypted_refresh_token is null and refresh_token_iv is null and refresh_token_tag is null)
+      or
+      (encrypted_refresh_token is not null and refresh_token_iv is not null and refresh_token_tag is not null)
+    ),
+  constraint google_oauth_access_token_triplet_check
+    check (
+      (encrypted_access_token is null and access_token_iv is null and access_token_tag is null)
+      or
+      (encrypted_access_token is not null and access_token_iv is not null and access_token_tag is not null)
+    ),
+  constraint google_oauth_connected_requires_refresh_token_check
+    check (status = 'disconnected' or encrypted_refresh_token is not null)
 );
 
 create index if not exists google_oauth_connections_org_status_idx
