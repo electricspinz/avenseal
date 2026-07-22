@@ -1,8 +1,11 @@
+import { getServerEnv } from "@/lib/env";
+
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
 export function checkRateLimit(key: string) {
-  const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60000);
-  const max = Number(process.env.RATE_LIMIT_MAX ?? 8);
+  const env = getServerEnv();
+  const windowMs = env.RATE_LIMIT_WINDOW_MS;
+  const max = env.RATE_LIMIT_MAX;
   const now = Date.now();
   const current = buckets.get(key);
 
@@ -18,4 +21,3 @@ export function checkRateLimit(key: string) {
   current.count += 1;
   return { allowed: true, remaining: max - current.count };
 }
-

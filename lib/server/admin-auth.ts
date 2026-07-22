@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getAdminSessionSecret, getServerEnv } from "@/lib/env";
 import { authenticateSupabaseUser, userHasOrganizationRole } from "@/lib/server/organization";
 import { hasSupabaseServiceConfig } from "@/lib/supabase/server";
 
@@ -9,7 +10,7 @@ export function getAdminCookieName() {
 }
 
 function getSecret() {
-  return process.env.ADMIN_SESSION_SECRET ?? "development-only-admin-session-secret";
+  return getAdminSessionSecret();
 }
 
 export function signAdminSession(email: string) {
@@ -29,12 +30,13 @@ export function verifyAdminSession(token?: string) {
 }
 
 export async function verifyAdminCredentials(email: string, password: string) {
-  if (hasSupabaseServiceConfig() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  const env = getServerEnv();
+  if (hasSupabaseServiceConfig() && env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     const user = await authenticateSupabaseUser(email, password);
     if (!user) return false;
     return userHasOrganizationRole(user.id, ["owner", "admin"]);
   }
-  const expectedEmail = process.env.ADMIN_DEMO_EMAIL ?? "admin@avenseal.local";
-  const expectedPassword = process.env.ADMIN_DEMO_PASSWORD ?? "password";
+  const expectedEmail = env.ADMIN_DEMO_EMAIL;
+  const expectedPassword = env.ADMIN_DEMO_PASSWORD;
   return email === expectedEmail && password === expectedPassword;
 }

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { generateSlots, isSlotAvailable, normalizeTime, weekdays } from "@/lib/availability";
 import { addMinutesToTime, excludeBusySlots } from "@/lib/milestone3/calendar";
+import { getServerEnv } from "@/lib/env";
 import { renderEmailSubject } from "@/lib/milestone3/email";
 import { calculatePaymentExpiration } from "@/lib/milestone3/policies";
 import { calculateCheckoutLineItem, getStandardNotarialActService } from "@/lib/milestone3/pricing";
@@ -358,13 +359,14 @@ async function getReservedTimes(date: string) {
 }
 
 async function getGoogleBusyIntervals(date: string) {
-  if (!hasSupabaseServiceConfig() || !process.env.GOOGLE_CALENDAR_ACCESS_TOKEN) return [];
+  const env = getServerEnv();
+  if (!hasSupabaseServiceConfig() || !env.GOOGLE_CALENDAR_ACCESS_TOKEN) return [];
   const settings = await loadOrganizationSettings();
-  const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
+  const calendarId = env.GOOGLE_CALENDAR_ID ?? "primary";
   const response = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
@@ -501,7 +503,7 @@ async function createAppointmentAccessLink(appointment: AppointmentRequest, reas
     });
   if (error?.code === "PGRST205") return null;
   if (error) throw error;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const siteUrl = getServerEnv().NEXT_PUBLIC_SITE_URL;
   return {
     url: `${siteUrl}/appointments/access/${encodeURIComponent(token)}`,
     expiresAt,
@@ -584,6 +586,7 @@ async function deliverPaymentRequestEmail(input: {
 }
 
 async function createCalendarEventRecord(appointment: AppointmentRequest, settings: OrganizationSettings) {
+  const env = getServerEnv();
   if (!hasSupabaseServiceConfig()) return null;
   const organizationId = appointment.organizationId;
   const startsAt = appointmentStartIso(appointment, settings.business.timezone);
@@ -592,17 +595,17 @@ async function createCalendarEventRecord(appointment: AppointmentRequest, settin
   let status: CalendarEventMapping["status"] = "pending";
   let lastError: string | null = null;
 
-  if (process.env.GOOGLE_CALENDAR_ACCESS_TOKEN) {
-    const calendarId = process.env.GOOGLE_CALENDAR_ID ?? "primary";
+  if (env.GOOGLE_CALENDAR_ACCESS_TOKEN) {
+    const calendarId = env.GOOGLE_CALENDAR_ID ?? "primary";
     const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
         summary: `Avenseal appointment ${appointment.id.slice(0, 8)}`,
-        description: `Remote online notary appointment. Admin: ${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/admin/appointments/${appointment.id}`,
+        description: `Remote online notary appointment. Admin: ${env.NEXT_PUBLIC_SITE_URL}/admin/appointments/${appointment.id}`,
         start: { dateTime: startsAt, timeZone: settings.business.timezone },
         end: { dateTime: endsAt, timeZone: settings.business.timezone }
       })
@@ -624,7 +627,7 @@ async function createCalendarEventRecord(appointment: AppointmentRequest, settin
         organization_id: organizationId,
         appointment_request_id: appointment.id,
         provider: "google_calendar",
-        calendar_id: process.env.GOOGLE_CALENDAR_ID ?? null,
+        calendar_id: env.GOOGLE_CALENDAR_ID ?? null,
         provider_event_id: providerEventId,
         status,
         starts_at: startsAt,
@@ -928,14 +931,15 @@ export const repository = {
     const lineItem = calculateCheckoutLineItem(service);
     const expiresAt = calculatePaymentExpiration(new Date(), appointment.preferredDate, settings.rules);
     const idempotencyKey = `payment-link-${appointment.id}-${randomUUID()}`;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const env = getServerEnv();
+    const siteUrl = env.NEXT_PUBLIC_SITE_URL;
     let checkoutSessionId: string | null = null;
     let checkoutUrl = `${siteUrl}/booking/confirmation?payment=pending`;
     let paymentIntentId: string | null = null;
 
-    if (process.env.STRIPE_SECRET_KEY) {
+    if (env.STRIPE_SECRET_KEY) {
       const session = await createStripeCheckoutSession({
-        apiKey: process.env.STRIPE_SECRET_KEY,
+        apiKey: env.STRIPE_SECRET_KEY,
         idempotencyKey,
         successUrl: `${siteUrl}/booking/confirmation?payment=success`,
         cancelUrl: `${siteUrl}/booking/confirmation?payment=cancelled`,
@@ -1165,11 +1169,12 @@ export const repository = {
     return loadOrganizationSettings();
   },
   async listIntegrations() {
+    const env = getServerEnv();
     if (!hasSupabaseServiceConfig()) {
       return [
         { provider: "google_calendar", status: "disconnected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null },
-        { provider: "stripe", status: process.env.STRIPE_SECRET_KEY ? "test_mode" : "disconnected", accountLabel: "Stripe test mode", lastConnectedAt: null, lastSyncedAt: null, lastError: null },
-        { provider: "gmail_smtp", status: process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD ? "connected" : "disconnected", accountLabel: process.env.SMTP_USER ?? null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }
+        { provider: "stripe", status: env.STRIPE_SECRET_KEY ? "test_mode" : "disconnected", accountLabel: "Stripe test mode", lastConnectedAt: null, lastSyncedAt: null, lastError: null },
+        { provider: "gmail_smtp", status: env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD ? "connected" : "disconnected", accountLabel: env.SMTP_USER ?? null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }
       ];
     }
     const organizationId = await resolvePublicOrganizationId();
