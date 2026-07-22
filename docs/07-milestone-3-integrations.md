@@ -61,6 +61,42 @@ Availability follows this pipeline:
 
 Calendar events are created only after successful payment confirmation. Calendar records are stored in `calendar_event_mappings`.
 
+## Google OAuth Foundation
+
+Google Calendar OAuth is organization-scoped. Each connection belongs to exactly one `organization_id`; server routes derive that organization from the authenticated admin session and active membership, never from a browser-submitted organization id.
+
+Configure a Google Cloud OAuth client with this authorized redirect URI:
+
+- Local: `http://localhost:3000/api/admin/integrations/google/callback`
+- Production: `https://YOUR_DOMAIN/api/admin/integrations/google/callback`
+
+Requested scopes:
+
+- `openid`, `email`, `profile`: verifies the connected Google account identity and email.
+- `https://www.googleapis.com/auth/calendar.freebusy`: supports future availability lookups.
+- `https://www.googleapis.com/auth/calendar.events`: supports future booking event creation, updates, cancellation, and Meet-link generation.
+
+Set these server-side variables:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY`
+
+Generate the encryption key with:
+
+```bash
+openssl rand -base64 32
+```
+
+`GOOGLE_TOKEN_ENCRYPTION_KEY` must be a base64-encoded 32-byte key. Refresh and access tokens are encrypted with AES-256-GCM before persistence in `google_oauth_connections`. Token ciphertext, IVs, tags, authorization codes, and raw provider errors must never be logged or rendered.
+
+`GOOGLE_CALENDAR_ACCESS_TOKEN` is deprecated and should only be used as a temporary pre-OAuth development fallback for existing calendar availability behavior. New Google Calendar work should use the organization-scoped OAuth connection and token refresh service.
+
+Disconnect marks the organization connection as disconnected, clears stored token material, and attempts provider revocation. Reconnect starts a fresh consent flow and preserves the existing refresh token only when Google omits a new one during a later consent response.
+
+Standard unit tests mock Google network calls and do not require real Google credentials. To test with a real Google Cloud project, configure the OAuth variables in `.env.local`, sign in as an owner/admin, open `/admin/settings/integrations`, connect Google, and verify the callback returns to the integrations page with a non-sensitive status indicator.
+
 ## Transactional Email
 
 Email messages are recorded in `communication_messages`. Provider delivery events can be stored in `communication_delivery_events`.
@@ -76,8 +112,9 @@ Server-only:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_OAUTH_REDIRECT_URI`
+- `GOOGLE_TOKEN_ENCRYPTION_KEY`
 - `GOOGLE_CALENDAR_ID`
-- `GOOGLE_CALENDAR_ACCESS_TOKEN`
+- `GOOGLE_CALENDAR_ACCESS_TOKEN` (deprecated fallback)
 - `EMAIL_FROM`
 - `SMTP_HOST`
 - `SMTP_PORT`

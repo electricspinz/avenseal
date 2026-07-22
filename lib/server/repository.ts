@@ -6,6 +6,7 @@ import { renderEmailSubject } from "@/lib/milestone3/email";
 import { calculatePaymentExpiration } from "@/lib/milestone3/policies";
 import { calculateCheckoutLineItem, getStandardNotarialActService } from "@/lib/milestone3/pricing";
 import { createStripeCheckoutSession } from "@/lib/milestone3/stripe";
+import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
 import { devStore } from "@/lib/server/dev-store";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
@@ -1178,13 +1179,14 @@ export const repository = {
       ];
     }
     const organizationId = await resolvePublicOrganizationId();
+    const googleStatus = await getGoogleConnectionStatus(organizationId);
     const { data, error } = await getSupabaseAdmin()
       .from("organization_integrations")
       .select("provider,status,account_label,last_connected_at,last_synced_at,last_error")
       .eq("organization_id", organizationId)
       .order("provider");
     if (error && error.code !== "PGRST205") throw error;
-    return (data ?? []).map((row) => ({
+    const integrations = (data ?? []).map((row) => ({
       provider: String(row.provider),
       status: String(row.status),
       accountLabel: stringOrNull(row.account_label),
@@ -1192,6 +1194,22 @@ export const repository = {
       lastSyncedAt: stringOrNull(row.last_synced_at),
       lastError: stringOrNull(row.last_error)
     }));
+    const googleIndex = integrations.findIndex((item) => item.provider === "google_calendar");
+    const googleIntegration = {
+      provider: "google_calendar",
+      status: googleStatus.status,
+      accountLabel: googleStatus.accountEmail,
+      lastConnectedAt: googleStatus.lastVerifiedAt,
+      lastSyncedAt: googleStatus.lastSuccessfulRefreshAt ?? googleStatus.lastVerifiedAt,
+      lastError: googleStatus.lastErrorMessage,
+      scopes: googleStatus.scopes
+    };
+    if (googleIndex >= 0) {
+      integrations[googleIndex] = { ...integrations[googleIndex], ...googleIntegration };
+    } else {
+      integrations.unshift(googleIntegration);
+    }
+    return integrations;
   },
   async updateOrganizationSettings(input: OrganizationSettingsInput) {
     if (!hasSupabaseServiceConfig()) return devStore.updateOrganizationSettings(input);
