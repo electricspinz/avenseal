@@ -63,6 +63,7 @@ test("booking availability respects Avenseal weekday hours", async ({ page }) =>
 });
 
 test("admin can view appointments", async ({ page }) => {
+  await createSyntheticAppointment(page);
   await page.goto("/admin/login");
   await loginAdmin(page);
   await page.goto("/admin/appointments");
@@ -112,6 +113,34 @@ async function loginAdmin(page: import("@playwright/test").Page) {
   const response = await responsePromise;
   expect(response.ok()).toBeTruthy();
   await page.waitForURL("**/admin");
+}
+
+async function createSyntheticAppointment(page: import("@playwright/test").Page) {
+  const available = await findAvailableSlot(page, 90);
+  const response = await page.request.post("/api/appointments", {
+    data: {
+      fullName: "E2E Admin Fixture",
+      email: "e2e-admin-fixture@example.invalid",
+      mobilePhone: "000-000-0000",
+      documentCategory: "affidavit",
+      documentCount: 1,
+      signerCount: 1,
+      estimatedNotarizations: 1,
+      notarizationsNotSure: false,
+      hasWitnessLines: false,
+      witnessesAvailable: false,
+      signerLocation: "Florida",
+      allSignersHaveGovernmentId: true,
+      preferredDate: available.date,
+      preferredTime: available.slot,
+      urgency: "not_urgent",
+      administrativeNotes: `LIVE_VERIFICATION_E2E_ADMIN_FIXTURE_${Date.now()}`,
+      consentAccepted: true,
+      privacyPolicyVersion: "e2e",
+      termsVersion: "e2e"
+    }
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 async function findAvailableSlot(page: import("@playwright/test").Page, offsetDays: number) {
