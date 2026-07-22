@@ -43,6 +43,7 @@ const environmentSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_OAUTH_REDIRECT_URI: optionalUrl,
+  GOOGLE_TOKEN_ENCRYPTION_KEY: optionalString,
   GOOGLE_CALENDAR_ID: optionalString,
   GOOGLE_CALENDAR_ACCESS_TOKEN: optionalString,
 
@@ -118,4 +119,17 @@ export function getAdminSessionSecret(rawEnv: RawEnvironment = process.env) {
     requireProductionSecret("ADMIN_SESSION_SECRET", env.ADMIN_SESSION_SECRET);
   }
   return env.ADMIN_SESSION_SECRET ?? "development-only-admin-session-secret";
+}
+
+export function getGoogleTokenEncryptionKey(rawEnv: RawEnvironment = process.env) {
+  const env = parseEnvironment(rawEnv);
+  const key = env.GOOGLE_TOKEN_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("Invalid environment configuration: GOOGLE_TOKEN_ENCRYPTION_KEY is required for Google OAuth token storage.");
+  }
+  const decoded = Buffer.from(key, "base64");
+  if (decoded.length !== 32 || decoded.toString("base64") !== key) {
+    throw new Error("Invalid environment configuration: GOOGLE_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+  }
+  return decoded;
 }

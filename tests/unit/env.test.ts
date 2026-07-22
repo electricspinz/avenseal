@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getAdminSessionSecret, getSmtpConfig, parseEnvironment } from "@/lib/env";
+import { getAdminSessionSecret, getGoogleTokenEncryptionKey, getSmtpConfig, parseEnvironment } from "@/lib/env";
 
 const baseEnv = {
   NODE_ENV: "test",
@@ -70,5 +70,11 @@ describe("environment validation", () => {
 
   it("returns null for incomplete optional SMTP configuration", () => {
     expect(getSmtpConfig({ ...baseEnv, EMAIL_FROM: "Avenseal <appointments@avenseal.com>" })).toBeNull();
+  });
+
+  it("validates Google token encryption key format", () => {
+    const key = Buffer.from("0123456789abcdef0123456789abcdef").toString("base64");
+    expect(getGoogleTokenEncryptionKey({ ...baseEnv, GOOGLE_TOKEN_ENCRYPTION_KEY: key })).toHaveLength(32);
+    expect(() => getGoogleTokenEncryptionKey({ ...baseEnv, GOOGLE_TOKEN_ENCRYPTION_KEY: "not-base64" })).toThrow(/GOOGLE_TOKEN_ENCRYPTION_KEY/);
   });
 });
