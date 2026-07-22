@@ -1,3 +1,5 @@
+import { getSmtpConfig } from "@/lib/env";
+
 export type EmailDeliveryResult = {
   status: "sent" | "failed" | "skipped";
   providerMessageId: string | null;
@@ -25,28 +27,7 @@ type SmtpTransportFactory = (config: {
 }) => SmtpTransport;
 
 function readSmtpConfig(env: NodeJS.ProcessEnv = process.env): SmtpConfig | null {
-  const port = Number(env.SMTP_PORT);
-  const secure = env.SMTP_SECURE?.trim().toLowerCase();
-  if (
-    !env.EMAIL_FROM ||
-    !env.SMTP_HOST ||
-    !env.SMTP_USER ||
-    !env.SMTP_PASSWORD ||
-    !Number.isInteger(port) ||
-    port <= 0 ||
-    (secure !== "true" && secure !== "false")
-  ) {
-    return null;
-  }
-
-  return {
-    from: env.EMAIL_FROM,
-    host: env.SMTP_HOST,
-    port,
-    secure: secure === "true",
-    user: env.SMTP_USER,
-    password: env.SMTP_PASSWORD
-  };
+  return getSmtpConfig(env);
 }
 
 async function loadNodemailerTransportFactory(): Promise<SmtpTransportFactory> {

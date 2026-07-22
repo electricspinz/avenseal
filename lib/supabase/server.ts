@@ -1,9 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
+import { getServerEnv } from "@/lib/env";
 
 export function hasSupabaseServiceConfig() {
+  const env = getServerEnv();
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+    env.NEXT_PUBLIC_SUPABASE_URL &&
+      env.SUPABASE_SERVICE_ROLE_KEY
   );
 }
 
@@ -18,8 +20,9 @@ export function normalizeSupabaseUrl(url: string) {
 }
 
 export function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const env = getServerEnv();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error("Supabase service config is missing.");
   }

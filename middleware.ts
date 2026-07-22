@@ -10,7 +10,11 @@ function base64UrlToBytes(value: string) {
 async function verifyAdminSession(token?: string) {
   if (!token || !token.includes(".")) return false;
   const [payload, signature] = token.split(".");
-  const secret = process.env.ADMIN_SESSION_SECRET ?? "development-only-admin-session-secret";
+  const configuredSecret = process.env.ADMIN_SESSION_SECRET;
+  if ((!configuredSecret || configuredSecret.length < 32) && process.env.NODE_ENV === "production") {
+    throw new Error("Invalid environment configuration: ADMIN_SESSION_SECRET must be set to a strong server-side secret in production.");
+  }
+  const secret = configuredSecret ?? "development-only-admin-session-secret";
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
   return crypto.subtle.verify("HMAC", key, base64UrlToBytes(signature), new TextEncoder().encode(payload));
 }

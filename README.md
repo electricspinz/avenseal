@@ -18,7 +18,7 @@ Milestone 1 application for Avenseal, a Florida remote online notary appointment
 1. Install dependencies:
 
    ```bash
-   pnpm install
+   pnpm install --frozen-lockfile
    ```
 
 2. Copy environment variables:
@@ -34,6 +34,17 @@ Milestone 1 application for Avenseal, a Florida remote online notary appointment
    ```
 
 Without Supabase environment variables, the app uses a development fallback store so the booking and admin workflows can be exercised locally. With `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` present, server routes use Supabase.
+
+Environment requirements are defined in `lib/env.ts` and documented with placeholders in `.env.example`. Keep real values in `.env.local`; `.env.local` is ignored by Git and must not be committed.
+
+Optional integrations fail closed or skip safely when unconfigured:
+
+- Stripe Checkout is disabled unless `STRIPE_SECRET_KEY` is present.
+- Stripe webhooks reject requests unless `STRIPE_WEBHOOK_SECRET` is configured and the signature verifies.
+- Gmail SMTP sends only when the SMTP variables are complete and valid.
+- Google Calendar availability/event creation is skipped unless the access token is configured.
+
+CI runs without real external-service secrets. Live integration tests load `.env.local` when present and skip live Supabase checks when required test credentials are absent.
 
 ## Supabase
 
@@ -72,7 +83,7 @@ pnpm build
 
 ## Deployment
 
-Deploy to Vercel with the variables from `.env.example`. Set Supabase service credentials only on the server side. Do not expose service-role keys to the browser.
+Deploy to Vercel with the variables from `.env.example`. Set secrets in the hosting platform's environment-variable settings, not in source control. Supabase service-role keys, Stripe secrets, SMTP passwords, Google client secrets, webhook secrets, and access tokens must remain server-side. Only `NEXT_PUBLIC_*` variables are intentionally browser-visible.
 
 ## Legal Review
 

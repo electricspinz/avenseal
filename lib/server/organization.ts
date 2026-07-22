@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getServerEnv } from "@/lib/env";
 import { getSupabaseAdmin, hasSupabaseServiceConfig, normalizeSupabaseUrl } from "@/lib/supabase/server";
 
 export const fallbackAvensealOrganizationId = "00000000-0000-4000-8000-000000000001";
@@ -38,7 +39,7 @@ type MembershipRow = {
 };
 
 export function getDefaultOrganizationSlug() {
-  return process.env.DEFAULT_ORGANIZATION_SLUG?.trim() || "avenseal";
+  return getServerEnv().DEFAULT_ORGANIZATION_SLUG;
 }
 
 function mapOrganization(row: OrganizationRow): OrganizationContext {
@@ -105,10 +106,11 @@ export async function resolvePublicOrganizationId(slug = getDefaultOrganizationS
 }
 
 export async function authenticateSupabaseUser(email: string, password: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
+  const env = getServerEnv();
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
   const authClient = createClient(
-    normalizeSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    normalizeSupabaseUrl(env.NEXT_PUBLIC_SUPABASE_URL),
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     { auth: { persistSession: false } }
   );
   const { data, error } = await authClient.auth.signInWithPassword({ email, password });
