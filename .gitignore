@@ -12,3 +12,4 @@ playwright-report
 .DS_Store
 .next/
 .env.local
+supabase/.temp/
