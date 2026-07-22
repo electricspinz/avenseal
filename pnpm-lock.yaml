@@ -42,6 +42,12 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.10.2
         version: 4.12.1(playwright-core@1.61.1)
+      '@eslint/eslintrc':
+        specifier: ^3.3.6
+        version: 3.3.6
+      '@eslint/js':
+        specifier: ^9.39.5
+        version: 9.39.5
       '@playwright/test':
         specifier: ^1.54.0
         version: 1.61.1
@@ -2077,6 +2083,7 @@ packages:
 
   nodemailer@6.10.1:
     resolution: {integrity: sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA==}
+    engines: {node: '>=6.0.0'}
 
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}

@@ -14,7 +14,7 @@ export default defineConfig({
   webServer: process.env.E2E_SKIP_WEB_SERVER
     ? undefined
     : {
-        command: `PORT=${e2ePort} pnpm dev`,
+        command: `env -u NO_COLOR PORT=${e2ePort} pnpm dev`,
         url: baseURL,
         reuseExistingServer: true,
         timeout: 120000

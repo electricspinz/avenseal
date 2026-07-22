@@ -34,12 +34,18 @@ const hasLiveConfig = Boolean(
 const maybeDescribe = hasLiveConfig ? describe : describe.skip;
 
 maybeDescribe("live Supabase integration and RLS", () => {
-  const service = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { persistSession: false }
+  let clientCounter = 0;
+  const createLiveClient = (key: string, label: string) => createClient(env.NEXT_PUBLIC_SUPABASE_URL!, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: `avenseal-live-${label}-${clientCounter++}`
+    }
   });
-  const anon = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false }
-  });
+
+  const service = createLiveClient(env.SUPABASE_SERVICE_ROLE_KEY!, "service");
+  const anon = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "anon");
 
   beforeAll(async () => {
     const { data, error } = await service
@@ -136,9 +142,7 @@ maybeDescribe("live Supabase integration and RLS", () => {
       expect(anonRead.error).toBeNull();
       expect(anonRead.data).toEqual([]);
 
-      const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-        auth: { persistSession: false }
-      });
+      const admin = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "token-admin");
       const adminLogin = await admin.auth.signInWithPassword({
         email: env.ADMIN_DEMO_EMAIL!,
         password: env.ADMIN_DEMO_PASSWORD!
@@ -195,18 +199,14 @@ maybeDescribe("live Supabase integration and RLS", () => {
     expect(created.error).toBeNull();
 
     try {
-      const nonAdmin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-        auth: { persistSession: false }
-      });
+      const nonAdmin = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "non-admin");
       const nonAdminLogin = await nonAdmin.auth.signInWithPassword({ email: nonAdminEmail, password: nonAdminPassword });
       expect(nonAdminLogin.error).toBeNull();
       const nonAdminRead = await nonAdmin.from("organizations").select("id");
       expect(nonAdminRead.error).toBeNull();
       expect(nonAdminRead.data).toEqual([]);
 
-      const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-        auth: { persistSession: false }
-      });
+      const admin = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "rls-admin");
       const adminLogin = await admin.auth.signInWithPassword({
         email: env.ADMIN_DEMO_EMAIL!,
         password: env.ADMIN_DEMO_PASSWORD!
@@ -252,9 +252,7 @@ maybeDescribe("live Supabase integration and RLS", () => {
       .single();
     expect(otherSettings.error).toBeNull();
 
-    const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      auth: { persistSession: false }
-    });
+    const admin = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "tenant-admin");
     const adminLogin = await admin.auth.signInWithPassword({
       email: env.ADMIN_DEMO_EMAIL!,
       password: env.ADMIN_DEMO_PASSWORD!
@@ -285,9 +283,7 @@ maybeDescribe("live Supabase integration and RLS", () => {
   });
 
   it("allows owner/admin settings updates and blocks lower-privilege members", async () => {
-    const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      auth: { persistSession: false }
-    });
+    const admin = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "settings-admin");
     const adminLogin = await admin.auth.signInWithPassword({
       email: env.ADMIN_DEMO_EMAIL!,
       password: env.ADMIN_DEMO_PASSWORD!
@@ -309,15 +305,14 @@ maybeDescribe("live Supabase integration and RLS", () => {
     try {
       await service.from("user_profiles").insert({ id: staff.data.user!.id, email: staffEmail, full_name: "Live Verification Staff" });
       await service.from("organization_users").insert({ organization_id: orgId, user_id: staff.data.user!.id, role: "staff" });
-      const staffClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-        auth: { persistSession: false }
-      });
+      const staffClient = createLiveClient(env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, "settings-staff");
       const staffLogin = await staffClient.auth.signInWithPassword({ email: staffEmail, password: staffPassword });
       expect(staffLogin.error).toBeNull();
       const staffRead = await staffClient.from("business_settings").select("organization_id").eq("organization_id", orgId);
       expect(staffRead.error).toBeNull();
       expect(staffRead.data?.length).toBe(1);
       const staffUpdate = await staffClient.from("business_settings").update({ description: "SHOULD_NOT_WRITE" }).eq("organization_id", orgId);
+      expect(staffUpdate.error).toBeNull();
       const afterStaffUpdate = await service.from("business_settings").select("description").eq("organization_id", orgId).single();
       expect(afterStaffUpdate.error).toBeNull();
       expect(afterStaffUpdate.data?.description).toBe(marker);
