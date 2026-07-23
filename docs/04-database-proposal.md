@@ -124,6 +124,31 @@ appointment update. Historical rows are backfilled only when their organization 
 active service. Ambiguous legacy rows remain nullable and use the isolated organization-default
 duration fallback until they can be assigned safely.
 
+`calendar_event_mappings`
+
+- `id uuid primary key`
+- `organization_id uuid references organizations(id)`
+- `appointment_request_id uuid references appointment_requests(id)`
+- `calendar_id text`
+- `provider_event_id text`
+- `status calendar_event_status`
+- `starts_at timestamptz`
+- `ends_at timestamptz`
+- `timezone text`
+- `meet_url text`
+- `provider_etag text`
+- `retry_count integer`
+- `last_attempted_at timestamptz`
+- `last_synced_at timestamptz`
+- `last_error text`
+- `last_error_at timestamptz`
+- unique organization/appointment pair
+
+The provider event ID is deterministic per appointment. A mapping is written before Google is
+called so provider retries cannot create duplicate events. Failed rows remain retryable and store
+only sanitized operational errors. Meet links are customer-visible only through the secure
+appointment access-token response.
+
 `appointment_signers`
 
 - `id uuid primary key`

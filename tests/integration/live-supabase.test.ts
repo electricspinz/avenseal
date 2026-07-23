@@ -814,6 +814,134 @@ maybeDescribe("live Supabase integration and RLS", () => {
     }
   }, 30_000);
 
+  it("persists calendar sync metadata and queues appointment and customer changes", async () => {
+    const marker = `LIVE_CALENDAR_SYNC_MAPPING_${Date.now()}`;
+    let customerId: string | null = null;
+    let appointmentId: string | null = null;
+
+    try {
+      const serviceResult = await service
+        .from("organization_services")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .eq("delivery_type", "remote")
+        .order("display_order")
+        .limit(1);
+      expect(serviceResult.error).toBeNull();
+      const serviceId = serviceResult.data![0].id;
+
+      const customer = await service
+        .from("customers")
+        .insert({
+          organization_id: orgId,
+          full_name: marker,
+          email: `${marker.toLowerCase()}@example.invalid`,
+          mobile_phone: "000-000-0000"
+        })
+        .select("id")
+        .single();
+      expect(customer.error).toBeNull();
+      customerId = customer.data!.id;
+
+      const appointment = await service
+        .from("appointment_requests")
+        .insert({
+          organization_id: orgId,
+          customer_id: customerId,
+          service_id: serviceId,
+          status: "confirmed",
+          document_category: "business_document",
+          document_count: 1,
+          signer_count: 1,
+          estimated_notarizations: 1,
+          notarizations_not_sure: false,
+          has_witness_lines: false,
+          witnesses_available: false,
+          signer_location: "Florida",
+          all_signers_have_government_id: true,
+          preferred_date: nextWeekdayDate(35),
+          preferred_time: "14:00",
+          urgency: "not_urgent",
+          administrative_notes: marker
+        })
+        .select("id")
+        .single();
+      expect(appointment.error).toBeNull();
+      const appointmentIdValue = appointment.data!.id;
+      appointmentId = appointmentIdValue;
+
+      const mapping = await service
+        .from("calendar_event_mappings")
+        .insert({
+          organization_id: orgId,
+          appointment_request_id: appointmentIdValue,
+          provider: "google_calendar",
+          calendar_id: "primary",
+          provider_event_id: `avenseal${appointmentIdValue.replaceAll("-", "")}`,
+          status: "created",
+          starts_at: "2026-09-01T18:00:00.000Z",
+          ends_at: "2026-09-01T18:30:00.000Z",
+          timezone: "America/New_York",
+          meet_url: "https://meet.google.com/staging-test",
+          provider_etag: "staging-etag",
+          retry_count: 0,
+          last_attempted_at: new Date().toISOString(),
+          last_synced_at: new Date().toISOString()
+        })
+        .select("id,meet_url,provider_etag,retry_count,last_attempted_at,last_error_at")
+        .single();
+      expect(mapping.error).toBeNull();
+      expect(mapping.data).toMatchObject({
+        meet_url: "https://meet.google.com/staging-test",
+        provider_etag: "staging-etag",
+        retry_count: 0,
+        last_error_at: null
+      });
+
+      const customerUpdate = await service
+        .from("customers")
+        .update({ full_name: `${marker}_UPDATED` })
+        .eq("id", customerId);
+      expect(customerUpdate.error).toBeNull();
+      const customerQueued = await service
+        .from("calendar_event_mappings")
+        .select("status,last_attempted_at")
+        .eq("appointment_request_id", appointmentId)
+        .single();
+      expect(customerQueued.error).toBeNull();
+      expect(customerQueued.data).toEqual({ status: "pending", last_attempted_at: null });
+
+      const mappingReset = await service
+        .from("calendar_event_mappings")
+        .update({ status: "updated", last_attempted_at: new Date().toISOString() })
+        .eq("appointment_request_id", appointmentId);
+      expect(mappingReset.error).toBeNull();
+      const appointmentUpdate = await service
+        .from("appointment_requests")
+        .update({ preferred_time: "15:00" })
+        .eq("id", appointmentId);
+      expect(appointmentUpdate.error).toBeNull();
+      const appointmentQueued = await service
+        .from("calendar_event_mappings")
+        .select("status,last_attempted_at")
+        .eq("appointment_request_id", appointmentId)
+        .single();
+      expect(appointmentQueued.error).toBeNull();
+      expect(appointmentQueued.data).toEqual({ status: "pending", last_attempted_at: null });
+
+      const anonRead = await anon
+        .from("calendar_event_mappings")
+        .select("id")
+        .eq("appointment_request_id", appointmentId);
+      expect(anonRead.error).toBeNull();
+      expect(anonRead.data).toEqual([]);
+    } finally {
+      if (appointmentId) await service.from("appointment_requests").delete().eq("id", appointmentId);
+      if (customerId) await service.from("customers").delete().eq("id", customerId);
+    }
+  });
+
   it("enforces RLS for anonymous, non-admin, and admin clients", async () => {
     const anonRead = await anon.from("appointment_requests").select("id");
     expect(anonRead.error).toBeNull();

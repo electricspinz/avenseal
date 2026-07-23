@@ -62,7 +62,38 @@ Availability follows this pipeline:
 8. Read the connected primary Google Calendar with `freeBusy`.
 9. Return only final safe public slots.
 
-Calendar events are created only after successful payment confirmation. Calendar records are stored in `calendar_event_mappings`.
+Calendar synchronization starts after Stripe confirms payment or an administrator explicitly
+changes an appointment to `confirmed`. Confirmed and ready appointments create or update one
+Google event; cancelled appointments delete it. Calendar records are stored in
+`calendar_event_mappings`.
+
+### Appointment event synchronization
+
+`lib/server/google-calendar-sync.ts` is the organization-scoped synchronization boundary. It
+reloads the appointment, customer, service ownership, timezone, and booking snapshots before
+every Google operation. The event title and duration use booking-time service snapshots rather
+than the current service name, duration, or price.
+
+Each appointment receives a deterministic Google event ID derived from its UUID. The mapping is
+persisted as `pending` before Google is called. This prevents duplicate events across webhook
+retries and also recovers when Google creates an event but the local success update fails:
+
+- a repeated create that receives Google `409 Conflict` patches the deterministic event;
+- an update that receives `404 Not Found` recreates the same deterministic event;
+- repeated cancellation treats Google `404 Not Found` as success.
+
+Successful mappings store the calendar ID, provider event ID, sync status, timestamps, Meet URL,
+and provider etag. Failures store only a sanitized message, failure timestamp, and retry count.
+Appointment and payment writes are not rolled back when Google is unavailable.
+
+`retryPendingCalendarSyncs` processes organization-scoped `pending` and `failed` mappings without
+a queue. The protected `POST /api/admin/calendar-sync/retry` route exposes this operation to an
+authenticated owner or administrator. Appointment and customer database triggers only mark
+existing mappings pending; they never call Google.
+
+Remote services request Google Meet conference data during event creation. In-person services do
+not. The Meet URL is returned only through the secure customer appointment-token flow and
+authenticated admin surfaces; Google event IDs and synchronization errors remain internal.
 
 ### Calendar-aware availability service
 
@@ -109,7 +140,7 @@ Current limitations:
 - The booking flow uses the organization's first active service until customer service selection is introduced.
 - Ambiguous pre-`0009` appointment rows without a defensible service assignment retain the
   organization-default duration fallback.
-- This milestone reads Google Calendar availability only. It does not add Google event create, update, delete, Meet-link, or booking synchronization behavior.
+- Retry processing is invoked explicitly; no scheduled Vercel cron is configured yet.
 
 Run unit and staging integration coverage with:
 
@@ -162,7 +193,14 @@ After staging OAuth is connected, verify that the stored encrypted connection ca
 pnpm test:google-calendar
 ```
 
-This command is staging-only. It refuses to run unless `LIVE_SUPABASE_ENVIRONMENT=staging` is configured in ignored local environment settings. It reuses the server-side Google OAuth token refresh/decryption path, performs a `freeBusy` request against the connected account's primary calendar for the next 24 hours, creates a temporary event titled `Avenseal Staging Calendar Test` approximately 48 hours in the future, verifies Google returns event metadata, and immediately deletes the temporary event. The command prints only safe stage summaries and must not log tokens, encrypted token fields, authorization headers, client secrets, or project credentials.
+This command is staging-only. It refuses to run unless
+`LIVE_SUPABASE_ENVIRONMENT=staging` is configured in ignored local environment settings. It
+reuses the server-side Google OAuth token refresh/decryption and synchronization paths, performs
+a `freeBusy` request, creates a synthetic confirmed appointment, verifies its Google event,
+changes the appointment time and verifies the event update, cancels the appointment and verifies
+event deletion, then removes its synthetic database fixtures. The command prints only safe stage
+summaries and must not log tokens, encrypted token fields, authorization headers, client secrets,
+customer data, or project credentials.
 
 ## Transactional Email
 

@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { normalizeTime, weekdays } from "@/lib/availability";
-import { addMinutesToTime } from "@/lib/milestone3/calendar";
 import { getServerEnv } from "@/lib/env";
 import { renderEmailSubject } from "@/lib/milestone3/email";
 import { calculatePaymentExpiration } from "@/lib/milestone3/policies";
@@ -10,6 +9,10 @@ import {
   localTimeForAppointmentSlot
 } from "@/lib/server/appointment-availability";
 import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
+import {
+  retryPendingCalendarSyncs,
+  synchronizeAppointmentCalendar
+} from "@/lib/server/google-calendar-sync";
 import {
   buildAppointmentServiceSnapshot,
   calculateAppointmentCheckoutLineItem,
@@ -229,12 +232,19 @@ function mapCalendarEvent(row: SupabaseRow): CalendarEventMapping {
   return {
     id: String(row.id),
     appointmentRequestId: String(row.appointment_request_id),
+    calendarId: String(row.calendar_id ?? "primary"),
     providerEventId: stringOrNull(row.provider_event_id),
     status: String(row.status) as CalendarEventMapping["status"],
     startsAt: String(row.starts_at),
     endsAt: String(row.ends_at),
     timezone: String(row.timezone),
-    lastError: stringOrNull(row.last_error)
+    meetUrl: stringOrNull(row.meet_url),
+    providerEtag: stringOrNull(row.provider_etag),
+    retryCount: Number(row.retry_count ?? 0),
+    lastSyncedAt: stringOrNull(row.last_synced_at),
+    lastAttemptedAt: stringOrNull(row.last_attempted_at),
+    lastError: stringOrNull(row.last_error),
+    lastErrorAt: stringOrNull(row.last_error_at)
   };
 }
 
@@ -329,17 +339,6 @@ async function loadOrganizationSettings(): Promise<OrganizationSettings> {
     communications: mapCommunications(communicationsResult.data),
     concierge: mapConcierge(conciergeResult.data)
   };
-}
-
-function appointmentStartIso(appointment: AppointmentRequest, timezone: string) {
-  const offset = timezone === "America/New_York" ? "-04:00" : "Z";
-  return `${appointment.preferredDate}T${appointment.preferredTime}:00${offset}`;
-}
-
-function appointmentEndIso(appointment: AppointmentRequest, timezone: string, durationMinutes: number) {
-  const endTime = addMinutesToTime(appointment.preferredTime, durationMinutes);
-  const offset = timezone === "America/New_York" ? "-04:00" : "Z";
-  return `${appointment.preferredDate}T${endTime}:00${offset}`;
 }
 
 export function hashAppointmentAccessToken(token: string) {
@@ -535,67 +534,18 @@ async function deliverPaymentRequestEmail(input: {
   }
 }
 
-async function createCalendarEventRecord(appointment: AppointmentRequest, settings: OrganizationSettings) {
-  const env = getServerEnv();
-  if (!hasSupabaseServiceConfig()) return null;
-  const organizationId = appointment.organizationId;
-  const startsAt = appointmentStartIso(appointment, settings.business.timezone);
-  const durationMinutes = resolveAppointmentDuration(
-    appointment.serviceDurationMinutesSnapshot,
-    settings.rules.defaultDurationMinutes
-  );
-  const endsAt = appointmentEndIso(appointment, settings.business.timezone, durationMinutes);
-  let providerEventId: string | null = null;
-  let status: CalendarEventMapping["status"] = "pending";
-  let lastError: string | null = null;
-
-  if (env.GOOGLE_CALENDAR_ACCESS_TOKEN) {
-    const calendarId = env.GOOGLE_CALENDAR_ID ?? "primary";
-    const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        summary: `Avenseal appointment ${appointment.id.slice(0, 8)}`,
-        description: `Remote online notary appointment. Admin: ${env.NEXT_PUBLIC_SITE_URL}/admin/appointments/${appointment.id}`,
-        start: { dateTime: startsAt, timeZone: settings.business.timezone },
-        end: { dateTime: endsAt, timeZone: settings.business.timezone }
-      })
+async function synchronizeCalendarAfterSave(organizationId: string, appointmentId: string) {
+  try {
+    return await synchronizeAppointmentCalendar({ organizationId, appointmentId });
+  } catch {
+    console.error("[google-calendar-sync]", {
+      component: "google_calendar_sync",
+      action: "workflow_error",
+      organizationId,
+      appointmentId
     });
-    const body = await response.json().catch(() => ({}));
-    if (response.ok) {
-      providerEventId = body.id ?? null;
-      status = "created";
-    } else {
-      status = "failed";
-      lastError = body.error?.message ?? "Google Calendar event creation failed.";
-    }
+    return null;
   }
-
-  const { data, error } = await getSupabaseAdmin()
-    .from("calendar_event_mappings")
-    .upsert(
-      {
-        organization_id: organizationId,
-        appointment_request_id: appointment.id,
-        provider: "google_calendar",
-        calendar_id: env.GOOGLE_CALENDAR_ID ?? null,
-        provider_event_id: providerEventId,
-        status,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        timezone: settings.business.timezone,
-        last_synced_at: status === "created" ? new Date().toISOString() : null,
-        last_error: lastError
-      },
-      { onConflict: "organization_id,appointment_request_id" }
-    )
-    .select()
-    .single();
-  if (error) throw error;
-  return mapCalendarEvent(data);
 }
 
 export const repository = {
@@ -807,7 +757,15 @@ export const repository = {
         }
       });
     }
-    return mapAppointment(data);
+    const mapped = mapAppointment(data);
+    const calendarRelevantUpdate =
+      (update.status !== undefined && ["confirmed", "ready", "cancelled"].includes(update.status)) ||
+      (["confirmed", "ready"].includes(previous.status) &&
+        Boolean(update.preferredDate || update.preferredTime || serviceChanged));
+    if (calendarRelevantUpdate) {
+      await synchronizeCalendarAfterSave(organizationId, id);
+    }
+    return mapped;
   },
   async listCustomers() {
     if (!hasSupabaseServiceConfig()) return devStore.listCustomers();
@@ -1090,7 +1048,6 @@ export const repository = {
       .single();
     if (appointmentError) throw appointmentError;
     const appointment = mapAppointment(appointmentRow);
-    const settings = await loadOrganizationSettings();
     await supabase
       .from("appointment_payments")
       .update({ status: "paid", paid_at: new Date().toISOString(), stripe_payment_intent_id: input.paymentIntentId ?? payment.stripe_payment_intent_id })
@@ -1108,9 +1065,9 @@ export const repository = {
         to_status: "confirmed",
         reason: "Stripe payment succeeded."
       });
-      await createCalendarEventRecord(appointment, settings);
       await sendStatusLink(appointment, "payment_confirmed");
     }
+    await synchronizeCalendarAfterSave(organizationId, appointment.id);
     await supabase.from("slot_reservations").update({ status: "converted" }).eq("organization_id", organizationId).eq("appointment_request_id", appointment.id).eq("status", "active");
     await supabase.from("audit_logs").insert({
       organization_id: organizationId,
@@ -1161,6 +1118,14 @@ export const repository = {
       .limit(1);
     if (paymentError && paymentError.code !== "PGRST205") throw paymentError;
     const payment = paymentRows?.[0] ? mapPayment(paymentRows[0]) : null;
+    const { data: calendarRows, error: calendarError } = await supabase
+      .from("calendar_event_mappings")
+      .select("meet_url,status")
+      .eq("organization_id", tokenRecord.organization_id)
+      .eq("appointment_request_id", appointment.id)
+      .in("status", ["created", "updated"])
+      .limit(1);
+    if (calendarError && calendarError.code !== "PGRST205") throw calendarError;
     return {
       reference: referenceCode(appointment.id),
       customerName: appointment.customer.fullName,
@@ -1178,7 +1143,8 @@ export const repository = {
       paymentExpiresAt: payment?.expiresAt ?? null,
       businessName: settings.business.businessName,
       businessEmail: settings.business.supportEmail,
-      businessPhone: settings.business.supportPhone
+      businessPhone: settings.business.supportPhone,
+      meetingUrl: stringOrNull(calendarRows?.[0]?.meet_url)
     };
   },
   async requestCustomerStatusLink(input: { email: string; reference: string }) {
@@ -1246,6 +1212,10 @@ export const repository = {
       integrations.unshift(googleIntegration);
     }
     return integrations;
+  },
+  async retryCalendarSyncs(organizationId: string, limit?: number) {
+    if (!hasSupabaseServiceConfig()) return { attempted: 0, succeeded: 0, failed: 0 };
+    return retryPendingCalendarSyncs({ organizationId, limit });
   },
   async updateOrganizationSettings(input: OrganizationSettingsInput) {
     if (!hasSupabaseServiceConfig()) return devStore.updateOrganizationSettings(input);

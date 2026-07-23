@@ -103,7 +103,15 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
             <h2 className="text-xl font-semibold text-navy">Calendar</h2>
             <div className="mt-4 space-y-3 text-sm text-slateDeep">
               {calendarEvents.map((event) => (
-                <p key={event.id}><span className="font-semibold text-navy">{event.status}</span> · {new Date(event.startsAt).toLocaleString()} · {truncate(event.providerEventId)}</p>
+                <div key={event.id} className="space-y-1">
+                  <p><span className="font-semibold text-navy">{calendarStatusLabel(event.status)}</span> · {new Date(event.startsAt).toLocaleString()} · {truncate(event.providerEventId)}</p>
+                  {event.meetUrl && (
+                    <a className="font-semibold text-navy underline underline-offset-4" href={event.meetUrl} target="_blank" rel="noreferrer">
+                      Open Google Meet
+                    </a>
+                  )}
+                  {event.lastError && <p>Pending retry: {event.lastError}</p>}
+                </div>
               ))}
               {calendarEvents.length === 0 && <p>No calendar event has been created.</p>}
             </div>
@@ -136,6 +144,16 @@ function formatMoney(cents: number, currency: string) {
 function truncate(value: string | null) {
   if (!value) return "None";
   return value.length <= 12 ? value : `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function calendarStatusLabel(status: string) {
+  return {
+    pending: "Pending Sync",
+    created: "Synced",
+    updated: "Synced",
+    cancelled: "Removed",
+    failed: "Sync Failed"
+  }[status] ?? status;
 }
 
 function Row({ label, value }: { label: string; value: string }) {

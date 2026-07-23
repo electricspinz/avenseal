@@ -45,6 +45,15 @@ export function buildTemporaryEvent(now = new Date()) {
   };
 }
 
+export function buildStagingAppointmentSchedule(now = new Date()) {
+  const date = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return {
+    date,
+    initialTime: "14:00",
+    updatedTime: "15:30"
+  };
+}
+
 export function assertGoogleEventCreated(event) {
   if (!event || typeof event.id !== "string" || event.id.length === 0) {
     throw new Error("Google Calendar did not return an event ID.");

@@ -32,6 +32,14 @@ describe("Google Calendar staging verification helpers", () => {
     expect(event.end.dateTime).toBe("2026-07-25T12:15:00.000Z");
   });
 
+  it("builds a deterministic appointment reschedule pair approximately 48 hours ahead", () => {
+    expect(utils.buildStagingAppointmentSchedule(new Date("2026-07-23T12:00:00.000Z"))).toEqual({
+      date: "2026-07-25",
+      initialTime: "14:00",
+      updatedTime: "15:30"
+    });
+  });
+
   it("requires Google to return an event id and link or status", () => {
     expect(() => utils.assertGoogleEventCreated({ id: "event-id", htmlLink: "https://calendar.google.test/event" })).not.toThrow();
     expect(() => utils.assertGoogleEventCreated({ id: "event-id", status: "confirmed" })).not.toThrow();
