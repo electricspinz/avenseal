@@ -186,6 +186,7 @@ export function BookingFlow({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...draft,
+        serviceId,
         administrativeNotes: draft.administrativeNotes || null,
         privacyPolicyVersion: "legal-review-placeholder-2026-07",
         termsVersion: "legal-review-placeholder-2026-07"

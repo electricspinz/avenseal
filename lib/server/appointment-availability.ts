@@ -1,6 +1,7 @@
 import { TZDate } from "@date-fns/tz";
 import { z } from "zod";
 import { devStore } from "@/lib/server/dev-store";
+import { resolveAppointmentDuration } from "@/lib/server/appointment-services";
 import { fetchGoogleFreeBusy, type GoogleBusyInterval } from "@/lib/server/google-calendar";
 import { getValidGoogleAccessToken } from "@/lib/server/google-oauth";
 import { fallbackAvensealOrganizationId } from "@/lib/server/organization";
@@ -24,7 +25,8 @@ const availabilityRequestSchema = z.object({
   serviceId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, "Requested date is invalid."),
   timezone: z.string().min(1).optional(),
-  includeUnavailable: z.boolean().optional()
+  includeUnavailable: z.boolean().optional(),
+  excludeAppointmentId: z.string().uuid().optional()
 });
 
 export type AvailabilityErrorCode =
@@ -119,6 +121,7 @@ export type AppointmentAvailabilityDataSource = {
     serviceId: string;
     date: string;
     now: Date;
+    excludeAppointmentId?: string;
   }): Promise<AppointmentAvailabilityData>;
 };
 
@@ -137,6 +140,7 @@ export async function getAvailableAppointmentSlots(
     date: string;
     timezone?: string;
     includeUnavailable?: boolean;
+    excludeAppointmentId?: string;
   },
   options: {
     dataSource?: AppointmentAvailabilityDataSource;
@@ -158,7 +162,8 @@ export async function getAvailableAppointmentSlots(
       organizationId: parsed.data.organizationId,
       serviceId: parsed.data.serviceId,
       date: parsed.data.date,
-      now
+      now,
+      excludeAppointmentId: parsed.data.excludeAppointmentId
     });
   } catch {
     throw new AppointmentAvailabilityError("configuration_failure", "Scheduling configuration is unavailable.");
@@ -379,6 +384,16 @@ const defaultAvailabilityDataSource: AppointmentAvailabilityDataSource = {
       input.date,
       addLocalDays(input.date, 1, schedule?.timezone ?? "UTC")
     ];
+    let appointmentsQuery = supabase
+      .from("appointment_requests")
+      .select("id,preferred_date,preferred_time,status,service_duration_minutes_snapshot")
+      .eq("organization_id", input.organizationId)
+      .in("preferred_date", adjacentDates)
+      .in("status", blockingStatuses);
+    if (input.excludeAppointmentId) {
+      appointmentsQuery = appointmentsQuery.neq("id", input.excludeAppointmentId);
+    }
+
     const [
       organizationResult,
       serviceResult,
@@ -423,12 +438,7 @@ const defaultAvailabilityDataSource: AppointmentAvailabilityDataSource = {
         .eq("is_active", true)
         .order("created_at")
         .limit(1),
-      supabase
-        .from("appointment_requests")
-        .select("preferred_date,preferred_time,status")
-        .eq("organization_id", input.organizationId)
-        .in("preferred_date", adjacentDates)
-        .in("status", blockingStatuses),
+      appointmentsQuery,
       supabase
         .from("slot_reservations")
         .select("reserved_date,reserved_time,duration_minutes")
@@ -502,7 +512,10 @@ const defaultAvailabilityDataSource: AppointmentAvailabilityDataSource = {
         ...appointmentRows.map((row) => ({
           date: row.preferred_date,
           time: normalizeTime(row.preferred_time),
-          durationMinutes: rules?.default_duration_minutes ?? 30,
+          durationMinutes: resolveAppointmentDuration(
+            row.service_duration_minutes_snapshot,
+            rules?.default_duration_minutes ?? 30
+          ),
           source: "appointment" as const
         })),
         ...reservationRows.map((row) => ({
@@ -522,7 +535,10 @@ async function loadDevelopmentAvailabilityData(
 ): Promise<AppointmentAvailabilityData> {
   const settings = await devStore.getOrganizationSettings();
   const service = settings.services.find((item) => item.id === input.serviceId) ?? null;
-  const bookedTimes = await devStore.getBookedTimes(input.date);
+  const blockingAppointments = await devStore.getBlockingAppointments(
+    input.date,
+    input.excludeAppointmentId
+  );
   return {
     organization: {
       id: fallbackAvensealOrganizationId,
@@ -551,13 +567,16 @@ async function loadDevelopmentAvailabilityData(
       maximumAppointmentsPerDay: settings.rules.maximumAppointmentsPerDay
     },
     slotIncrementMinutes: defaultSlotIncrementMinutes,
-    blockers: [...bookedTimes].map((time) => ({
-      date: input.date,
-      time,
-      durationMinutes: settings.rules.defaultDurationMinutes,
+    blockers: blockingAppointments.map((appointment) => ({
+      date: appointment.preferredDate,
+      time: appointment.preferredTime,
+      durationMinutes: resolveAppointmentDuration(
+        appointment.serviceDurationMinutesSnapshot,
+        settings.rules.defaultDurationMinutes
+      ),
       source: "appointment"
     })),
-    activeAppointmentCount: bookedTimes.size
+    activeAppointmentCount: blockingAppointments.length
   };
 }
 

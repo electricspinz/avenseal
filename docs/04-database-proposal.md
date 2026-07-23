@@ -86,6 +86,11 @@ Urgency:
 - `id uuid primary key`
 - `organization_id uuid references organizations(id)`
 - `customer_id uuid references customers(id)`
+- `service_id uuid references organization_services(id) on delete restrict`
+- `service_name_snapshot text`
+- `service_duration_minutes_snapshot integer`
+- `service_price_cents_snapshot integer`
+- `service_currency_snapshot text`
 - `status appointment_status not null default 'awaiting_review'`
 - `document_category document_category not null`
 - `document_count integer not null`
@@ -106,6 +111,18 @@ Urgency:
 - `created_at timestamptz not null`
 - `updated_at timestamptz not null`
 - indexes on organization/status/date/customer
+
+Appointments keep both a service reference and booking-time snapshots. The reference preserves
+the relationship and prevents deletion of a service used by historical appointments. The
+snapshots preserve the customer-facing name, duration, integer-cent price, and currency even
+when the source service is later renamed, repriced, or deactivated.
+
+Snapshot fields are derived by the server and a database trigger; browser values are ignored.
+They are immutable while `service_id` is unchanged. An explicit service reassignment validates
+the replacement service and appointment availability, then refreshes all snapshot fields in one
+appointment update. Historical rows are backfilled only when their organization has exactly one
+active service. Ambiguous legacy rows remain nullable and use the isolated organization-default
+duration fallback until they can be assigned safely.
 
 `appointment_signers`
 
@@ -237,4 +254,3 @@ Urgency:
 - Public anonymous users cannot read business records.
 - Public appointment creation should use a tightly scoped server-side function or route using the service role, not broad anonymous table policies.
 - Audit logs are append-only for application code and read-only for admins.
-

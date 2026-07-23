@@ -52,6 +52,11 @@ export interface AppointmentRequest {
   id: string;
   organizationId: string;
   customerId: string;
+  serviceId: string | null;
+  serviceNameSnapshot: string | null;
+  serviceDurationMinutesSnapshot: number | null;
+  servicePriceCentsSnapshot: number | null;
+  serviceCurrencySnapshot: string | null;
   status: AppointmentStatus;
   customer: Customer;
   documentCategory: DocumentCategory;

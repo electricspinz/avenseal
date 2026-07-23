@@ -7,6 +7,7 @@ import {
   getAvailableAppointmentSlots,
   localTimeForAppointmentSlot
 } from "@/lib/server/appointment-availability";
+import { repository } from "@/lib/server/repository";
 
 function readEnv() {
   const local = existsSync(".env.local") ? readFileSync(".env.local", "utf8") : "";
@@ -521,6 +522,7 @@ maybeDescribe("live Supabase integration and RLS", () => {
         .insert({
           organization_id: orgId,
           customer_id: customerId,
+          service_id: serviceId,
           status: "awaiting_review",
           document_category: "affidavit",
           document_count: 1,
@@ -533,10 +535,17 @@ maybeDescribe("live Supabase integration and RLS", () => {
           urgency: "not_urgent",
           administrative_notes: marker
         })
-        .select("id")
+        .select("id,service_id,service_name_snapshot,service_duration_minutes_snapshot,service_price_cents_snapshot,service_currency_snapshot")
         .single();
       expect(appointment.error).toBeNull();
       appointmentId = appointment.data!.id;
+      expect(appointment.data).toMatchObject({
+        service_id: serviceId,
+        service_duration_minutes_snapshot: 30,
+        service_currency_snapshot: "USD"
+      });
+      expect(appointment.data?.service_name_snapshot).toBeTruthy();
+      expect(Number.isInteger(appointment.data?.service_price_cents_snapshot)).toBe(true);
 
       const afterInsert = await getAvailableAppointmentSlots(
         { organizationId: orgId, serviceId, date },
@@ -565,6 +574,245 @@ maybeDescribe("live Supabase integration and RLS", () => {
     expect(cleanup.error).toBeNull();
     expect(cleanup.count).toBe(0);
   });
+
+  it("persists immutable service snapshots and uses them for appointment conflicts", async () => {
+    const marker = `live_snapshot_${Date.now()}`;
+    const date = nextWeekdayDate(28);
+    let serviceAId: string | null = null;
+    let serviceBId: string | null = null;
+    let inactiveServiceId: string | null = null;
+    let otherOrganizationId: string | null = null;
+    let otherServiceId: string | null = null;
+    let appointmentId: string | null = null;
+    let customerId: string | null = null;
+    const originalSmtpPassword = process.env.SMTP_PASSWORD;
+
+    try {
+      const serviceA = await service
+        .from("organization_services")
+        .insert({
+          organization_id: orgId,
+          internal_name: `${marker}_a`,
+          customer_name: "Snapshot Test Service A",
+          base_price_cents: 2500,
+          currency: "USD",
+          default_duration_minutes: 60,
+          is_active: true,
+          delivery_type: "remote",
+          metadata: { bookable: true, fixture: marker }
+        })
+        .select("id")
+        .single();
+      expect(serviceA.error).toBeNull();
+      const serviceAIdValue = serviceA.data!.id;
+      serviceAId = serviceAIdValue;
+
+      const availability = await getAvailableAppointmentSlots({
+        organizationId: orgId,
+        serviceId: serviceAIdValue,
+        date
+      });
+      expect(availability.slots.length).toBeGreaterThan(0);
+      const selected = availability.slots[0];
+      const preferredTime = localTimeForAppointmentSlot(selected.startAt, availability.timezone);
+
+      process.env.SMTP_PASSWORD = "";
+      const appointment = await repository.createAppointment({
+        serviceId: serviceAIdValue,
+        fullName: `LIVE_STAGING_SNAPSHOT_${marker}`,
+        email: `${marker}@example.invalid`,
+        mobilePhone: "000-000-0000",
+        documentCategory: "business_document",
+        documentCount: 1,
+        signerCount: 1,
+        estimatedNotarizations: 1,
+        notarizationsNotSure: false,
+        hasWitnessLines: false,
+        witnessesAvailable: false,
+        signerLocation: "Florida",
+        allSignersHaveGovernmentId: true,
+        preferredDate: date,
+        preferredTime,
+        urgency: "not_urgent",
+        administrativeNotes: `LIVE_STAGING_SNAPSHOT_${marker}`,
+        consentAccepted: true,
+        privacyPolicyVersion: "staging-integration",
+        termsVersion: "staging-integration"
+      });
+      appointmentId = appointment.id;
+      customerId = appointment.customerId;
+      expect(appointment).toMatchObject({
+        serviceId: serviceAId,
+        serviceNameSnapshot: "Snapshot Test Service A",
+        serviceDurationMinutesSnapshot: 60,
+        servicePriceCentsSnapshot: 2500,
+        serviceCurrencySnapshot: "USD"
+      });
+
+      const sourceEdit = await service
+        .from("organization_services")
+        .update({
+          customer_name: "Edited Source Service A",
+          default_duration_minutes: 90,
+          base_price_cents: 5000
+        })
+        .eq("id", serviceAId);
+      expect(sourceEdit.error).toBeNull();
+      const unchanged = await service
+        .from("appointment_requests")
+        .select("service_name_snapshot,service_duration_minutes_snapshot,service_price_cents_snapshot,service_currency_snapshot")
+        .eq("id", appointmentId)
+        .single();
+      expect(unchanged.error).toBeNull();
+      expect(unchanged.data).toEqual({
+        service_name_snapshot: "Snapshot Test Service A",
+        service_duration_minutes_snapshot: 60,
+        service_price_cents_snapshot: 2500,
+        service_currency_snapshot: "USD"
+      });
+
+      const directSnapshotEdit = await service
+        .from("appointment_requests")
+        .update({ service_duration_minutes_snapshot: 5 })
+        .eq("id", appointmentId);
+      expect(directSnapshotEdit.error).toBeTruthy();
+
+      const protectedDelete = await service
+        .from("organization_services")
+        .delete()
+        .eq("id", serviceAId);
+      expect(protectedDelete.error).toBeTruthy();
+
+      const serviceB = await service
+        .from("organization_services")
+        .insert({
+          organization_id: orgId,
+          internal_name: `${marker}_b`,
+          customer_name: "Snapshot Test Service B",
+          base_price_cents: 2500,
+          currency: "USD",
+          default_duration_minutes: 75,
+          is_active: true,
+          delivery_type: "remote",
+          metadata: { bookable: true, fixture: marker }
+        })
+        .select("id")
+        .single();
+      expect(serviceB.error).toBeNull();
+      const serviceBIdValue = serviceB.data!.id;
+      serviceBId = serviceBIdValue;
+
+      const reassigned = await repository.updateAppointment(appointmentId, {
+        serviceId: serviceBIdValue
+      });
+      expect(reassigned).toMatchObject({
+        serviceId: serviceBId,
+        serviceNameSnapshot: "Snapshot Test Service B",
+        serviceDurationMinutesSnapshot: 75,
+        servicePriceCentsSnapshot: 2500,
+        serviceCurrencySnapshot: "USD"
+      });
+
+      const seededService = await service
+        .from("organization_services")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("internal_name", "florida_remote_online_notarial_act")
+        .single();
+      expect(seededService.error).toBeNull();
+      const withConflicts = await getAvailableAppointmentSlots(
+        {
+          organizationId: orgId,
+          serviceId: seededService.data!.id,
+          date,
+          includeUnavailable: true
+        },
+        { googleBusyProvider: async () => [] }
+      );
+      const localSlots = withConflicts.slots.map((slot) => ({
+        time: localTimeForAppointmentSlot(slot.startAt, withConflicts.timezone),
+        available: slot.available,
+        reason: slot.reason
+      }));
+      expect(localSlots).toContainEqual({
+        time: preferredTime,
+        available: false,
+        reason: "appointment_conflict"
+      });
+      expect(localSlots).toContainEqual({
+        time: addMinutes(preferredTime, 30),
+        available: false,
+        reason: "appointment_conflict"
+      });
+
+      const inactiveService = await service
+        .from("organization_services")
+        .insert({
+          organization_id: orgId,
+          internal_name: `${marker}_inactive`,
+          customer_name: "Inactive Snapshot Test Service",
+          base_price_cents: 2500,
+          currency: "USD",
+          default_duration_minutes: 30,
+          is_active: false,
+          delivery_type: "remote",
+          metadata: { bookable: true, fixture: marker }
+        })
+        .select("id")
+        .single();
+      expect(inactiveService.error).toBeNull();
+      const inactiveServiceIdValue = inactiveService.data!.id;
+      inactiveServiceId = inactiveServiceIdValue;
+      await expect(repository.updateAppointment(appointmentId, {
+        serviceId: inactiveServiceIdValue
+      })).rejects.toThrow("not available");
+
+      const otherOrganization = await service
+        .from("organizations")
+        .insert({
+          name: `LIVE_STAGING_SNAPSHOT_OTHER_${marker}`,
+          slug: `${marker.replaceAll("_", "-")}-other`,
+          display_name: `LIVE_STAGING_SNAPSHOT_OTHER_${marker}`,
+          legal_name: `LIVE_STAGING_SNAPSHOT_OTHER_${marker}`,
+          timezone: "America/New_York"
+        })
+        .select("id")
+        .single();
+      expect(otherOrganization.error).toBeNull();
+      const otherOrganizationIdValue = otherOrganization.data!.id;
+      otherOrganizationId = otherOrganizationIdValue;
+      const otherService = await service
+        .from("organization_services")
+        .insert({
+          organization_id: otherOrganizationIdValue,
+          internal_name: `${marker}_other`,
+          customer_name: "Other Organization Service",
+          base_price_cents: 2500,
+          currency: "USD",
+          default_duration_minutes: 30,
+          is_active: true,
+          delivery_type: "remote",
+          metadata: { bookable: true, fixture: marker }
+        })
+        .select("id")
+        .single();
+      expect(otherService.error).toBeNull();
+      const otherServiceIdValue = otherService.data!.id;
+      otherServiceId = otherServiceIdValue;
+      await expect(repository.updateAppointment(appointmentId, {
+        serviceId: otherServiceIdValue
+      })).rejects.toThrow("not available");
+    } finally {
+      if (originalSmtpPassword === undefined) delete process.env.SMTP_PASSWORD;
+      else process.env.SMTP_PASSWORD = originalSmtpPassword;
+      if (appointmentId) await service.from("appointment_requests").delete().eq("id", appointmentId);
+      if (customerId) await service.from("customers").delete().eq("id", customerId);
+      for (const id of [serviceAId, serviceBId, inactiveServiceId, otherServiceId]) {
+        if (id) await service.from("organization_services").delete().eq("id", id);
+      }
+      if (otherOrganizationId) await service.from("organizations").delete().eq("id", otherOrganizationId);
+    }
+  }, 30_000);
 
   it("enforces RLS for anonymous, non-admin, and admin clients", async () => {
     const anonRead = await anon.from("appointment_requests").select("id");
@@ -715,4 +963,10 @@ function nextWeekdayDate(daysAhead: number) {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return cursor.toISOString().slice(0, 10);
+}
+
+function addMinutes(time: string, minutes: number) {
+  const [hours, currentMinutes] = time.split(":").map(Number);
+  const total = hours * 60 + currentMinutes + minutes;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }

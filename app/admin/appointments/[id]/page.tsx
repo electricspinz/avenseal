@@ -40,6 +40,21 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Intake Answers</h2>
             <dl className="mt-4 grid gap-3 text-sm">
+              <Row label="Service booked" value={appointment.serviceNameSnapshot ?? "Legacy appointment"} />
+              <Row
+                label="Booked duration"
+                value={appointment.serviceDurationMinutesSnapshot
+                  ? `${appointment.serviceDurationMinutesSnapshot} minutes`
+                  : "Organization default (legacy)"}
+              />
+              <Row
+                label="Booked price"
+                value={
+                  appointment.servicePriceCentsSnapshot !== null && appointment.serviceCurrencySnapshot
+                    ? formatMoney(appointment.servicePriceCentsSnapshot, appointment.serviceCurrencySnapshot)
+                    : "Not recorded"
+                }
+              />
               <Row label="Document category" value={appointment.documentCategory.replaceAll("_", " ")} />
               <Row label="Documents" value={String(appointment.documentCount)} />
               <Row label="Signers" value={String(appointment.signerCount)} />
