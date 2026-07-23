@@ -11,7 +11,8 @@
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "env -u NO_COLOR playwright test",
-    "seed:staging": "node scripts/seed-staging.mjs"
+    "seed:staging": "node scripts/seed-staging.mjs",
+    "test:google-calendar": "node scripts/test-google-calendar.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

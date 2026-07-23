@@ -97,6 +97,14 @@ Disconnect marks the organization connection as disconnected, clears stored toke
 
 Standard unit tests mock Google network calls and do not require real Google credentials. To test with a real Google Cloud project, configure the OAuth variables in `.env.local`, sign in as an owner/admin, open `/admin/settings/integrations`, connect Google, and verify the callback returns to the integrations page with a non-sensitive status indicator.
 
+After staging OAuth is connected, verify that the stored encrypted connection can call Google Calendar:
+
+```bash
+pnpm test:google-calendar
+```
+
+This command is staging-only. It refuses to run unless `LIVE_SUPABASE_ENVIRONMENT=staging` is configured in ignored local environment settings. It reuses the server-side Google OAuth token refresh/decryption path, performs a `freeBusy` request against the connected account's primary calendar for the next 24 hours, creates a temporary event titled `Avenseal Staging Calendar Test` approximately 48 hours in the future, verifies Google returns event metadata, and immediately deletes the temporary event. The command prints only safe stage summaries and must not log tokens, encrypted token fields, authorization headers, client secrets, or project credentials.
+
 ## Transactional Email
 
 Email messages are recorded in `communication_messages`. Provider delivery events can be stored in `communication_delivery_events`.
