@@ -1,11 +1,15 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { generateSlots, isSlotAvailable, normalizeTime, weekdays } from "@/lib/availability";
-import { addMinutesToTime, excludeBusySlots } from "@/lib/milestone3/calendar";
+import { normalizeTime, weekdays } from "@/lib/availability";
+import { addMinutesToTime } from "@/lib/milestone3/calendar";
 import { getServerEnv } from "@/lib/env";
 import { renderEmailSubject } from "@/lib/milestone3/email";
 import { calculatePaymentExpiration } from "@/lib/milestone3/policies";
 import { calculateCheckoutLineItem, getStandardNotarialActService } from "@/lib/milestone3/pricing";
 import { createStripeCheckoutSession } from "@/lib/milestone3/stripe";
+import {
+  getAvailableAppointmentSlots,
+  localTimeForAppointmentSlot
+} from "@/lib/server/appointment-availability";
 import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
 import { devStore } from "@/lib/server/dev-store";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
@@ -312,76 +316,6 @@ async function loadOrganizationSettings(): Promise<OrganizationSettings> {
   };
 }
 
-function activeAppointmentStatuses() {
-  return ["awaiting_review", "awaiting_payment", "clarification_needed", "approved_pending_payment", "payment_processing", "confirmed", "ready", "follow_up_required"] as AppointmentStatus[];
-}
-
-function legacyActiveAppointmentStatuses() {
-  return ["awaiting_review", "awaiting_payment", "confirmed", "ready", "follow_up_required"] as AppointmentStatus[];
-}
-
-async function getBookedTimes(date: string) {
-  if (!hasSupabaseServiceConfig()) return devStore.getBookedTimes(date);
-  const supabase = getSupabaseAdmin();
-  const organizationId = await resolvePublicOrganizationId();
-  const { data, error } = await supabase
-    .from("appointment_requests")
-    .select("preferred_time")
-    .eq("organization_id", organizationId)
-    .eq("preferred_date", date)
-    .in("status", activeAppointmentStatuses());
-  if (error?.code === "22P02") {
-    const fallback = await supabase
-      .from("appointment_requests")
-      .select("preferred_time")
-      .eq("organization_id", organizationId)
-      .eq("preferred_date", date)
-      .in("status", legacyActiveAppointmentStatuses());
-    if (fallback.error) throw fallback.error;
-    return new Set((fallback.data ?? []).map((row) => normalizeTime(row.preferred_time)));
-  }
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => normalizeTime(row.preferred_time)));
-}
-
-async function getReservedTimes(date: string) {
-  if (!hasSupabaseServiceConfig()) return new Set<string>();
-  const organizationId = await resolvePublicOrganizationId();
-  const { data, error } = await getSupabaseAdmin()
-    .from("slot_reservations")
-    .select("reserved_time")
-    .eq("organization_id", organizationId)
-    .eq("reserved_date", date)
-    .eq("status", "active")
-    .gt("expires_at", new Date().toISOString());
-  if (error?.code === "PGRST205") return null;
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => normalizeTime(row.reserved_time)));
-}
-
-async function getGoogleBusyIntervals(date: string) {
-  const env = getServerEnv();
-  if (!hasSupabaseServiceConfig() || !env.GOOGLE_CALENDAR_ACCESS_TOKEN) return [];
-  const settings = await loadOrganizationSettings();
-  const calendarId = env.GOOGLE_CALENDAR_ID ?? "primary";
-  const response = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.GOOGLE_CALENDAR_ACCESS_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      timeMin: `${date}T00:00:00-04:00`,
-      timeMax: `${date}T23:59:59-04:00`,
-      timeZone: settings.business.timezone,
-      items: [{ id: calendarId }]
-    })
-  });
-  if (!response.ok) return [];
-  const data = await response.json();
-  return data.calendars?.[calendarId]?.busy ?? [];
-}
-
 function appointmentStartIso(appointment: AppointmentRequest, timezone: string) {
   const offset = timezone === "America/New_York" ? "-04:00" : "Z";
   return `${appointment.preferredDate}T${appointment.preferredTime}:00${offset}`;
@@ -648,13 +582,17 @@ async function createCalendarEventRecord(appointment: AppointmentRequest, settin
 export const repository = {
   async createAppointment(input: BookingInput) {
     const settings = await loadOrganizationSettings();
-    const bookedTimes = await getBookedTimes(input.preferredDate);
-    const reservedTimes = await getReservedTimes(input.preferredDate);
-    if (
-      !isSlotAvailable({ date: input.preferredDate, time: input.preferredTime, intervals: settings.intervals, exceptions: settings.exceptions, rules: settings.rules }) ||
-      bookedTimes.has(normalizeTime(input.preferredTime)) ||
-      (reservedTimes?.has(normalizeTime(input.preferredTime)) ?? false)
-    ) {
+    const service = settings.services.find((item) => item.isActive);
+    if (!service) throw new Error("No bookable service is configured.");
+    const availability = await getAvailableAppointmentSlots({
+      organizationId: settings.business.organizationId!,
+      serviceId: service.id,
+      date: input.preferredDate
+    });
+    const requestedTime = normalizeTime(input.preferredTime);
+    if (!availability.slots.some((slot) =>
+      localTimeForAppointmentSlot(slot.startAt, availability.timezone) === requestedTime
+    )) {
       throw new Error("Selected appointment time is outside current availability.");
     }
 
@@ -1364,16 +1302,28 @@ export const repository = {
   },
   async getAvailableSlots(date: string) {
     const settings = await loadOrganizationSettings();
-    const bookedTimes = await getBookedTimes(date);
-    const reservedTimes = await getReservedTimes(date);
-    const busy = await getGoogleBusyIntervals(date);
-    const baseSlots = generateSlots({ date, intervals: settings.intervals, exceptions: settings.exceptions, rules: settings.rules })
-      .filter((slot) => !bookedTimes.has(slot) && !(reservedTimes?.has(slot) ?? false));
-    const slots = excludeBusySlots({ date, slots: baseSlots, durationMinutes: settings.rules.defaultDurationMinutes, busy });
+    const service = settings.services.find((item) => item.isActive);
+    if (!service) {
+      return {
+        date,
+        timezone: settings.business.timezone,
+        durationMinutes: settings.rules.defaultDurationMinutes,
+        slots: [],
+        closedDays: [0, 1, 2, 3, 4, 5, 6]
+      };
+    }
+    const availability = await getAvailableAppointmentSlots({
+      organizationId: settings.business.organizationId!,
+      serviceId: service.id,
+      date
+    });
+    const slots = availability.slots.map((slot) =>
+      localTimeForAppointmentSlot(slot.startAt, availability.timezone)
+    );
     return {
       date,
-      timezone: settings.business.timezone,
-      durationMinutes: settings.rules.defaultDurationMinutes,
+      timezone: availability.timezone,
+      durationMinutes: availability.durationMinutes,
       slots,
       closedDays: weekdays
         .map((label, weekday) => ({ label, weekday, open: settings.intervals.some((interval) => interval.weekday === weekday) }))

@@ -75,7 +75,7 @@ The local availability pipeline implemented in Sprint 2 is:
 4. Appointment duration and buffers.
 5. Available booking slots.
 
-Future calendar conflict and appointment-capacity checks can be added after these local steps without replacing the pipeline.
+Google Calendar conflicts, active Avenseal appointments, payment reservations, booking windows, and appointment-capacity checks are applied after these local steps by the server-side appointment availability service.
 
 ## Updating Avenseal Hours
 
