@@ -16,6 +16,7 @@ import type {
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 const organizationId = "00000000-0000-4000-8000-000000000001";
+const serviceId = "00000000-0000-4000-8000-000000000002";
 const now = new Date().toISOString();
 
 function id(prefix: string) {
@@ -63,7 +64,7 @@ const exceptions: AvailabilityException[] = [];
 
 let services: OrganizationService[] = [
   {
-    id: "dev_service_1",
+    id: serviceId,
     internalName: "remote_online_notarization",
     customerName: "Remote online notarization appointment",
     description: "Pricing is configurable and should be finalized before public launch.",
@@ -287,7 +288,7 @@ export const devStore = {
     };
     intervals = input.intervals;
     services = [{
-      id: services[0]?.id ?? "dev_service_1",
+      id: services[0]?.id ?? serviceId,
       internalName: "remote_online_notarization",
       customerName: input.serviceCustomerName,
       description: input.serviceDescription,

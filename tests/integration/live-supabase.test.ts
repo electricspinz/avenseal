@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { generateSlots } from "@/lib/availability";
+import {
+  getAvailableAppointmentSlots,
+  localTimeForAppointmentSlot
+} from "@/lib/server/appointment-availability";
 
 function readEnv() {
   const local = existsSync(".env.local") ? readFileSync(".env.local", "utf8") : "";
@@ -37,6 +41,7 @@ const hasStagingGuard = env.LIVE_SUPABASE_ENVIRONMENT === "staging";
 if (hasLiveConfig && !hasStagingGuard) {
   console.warn("Skipping live Supabase integration tests: set LIVE_SUPABASE_ENVIRONMENT=staging to confirm the target is staging.");
 }
+if (hasLiveConfig && hasStagingGuard) Object.assign(process.env, env);
 
 const maybeDescribe = hasLiveConfig && hasStagingGuard ? describe : describe.skip;
 
@@ -470,6 +475,97 @@ maybeDescribe("live Supabase integration and RLS", () => {
     expect(saturday).toEqual([]);
   });
 
+  it("loads seeded availability, excludes a synthetic appointment, and preserves tenant boundaries", async () => {
+    const serviceResult = await service
+      .from("organization_services")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .order("display_order")
+      .limit(1);
+    expect(serviceResult.error).toBeNull();
+    expect(serviceResult.data?.[0]?.id).toBeTruthy();
+    const serviceId = serviceResult.data![0].id;
+    const date = nextWeekdayDate(21);
+    const noGoogleBusy = async () => [];
+    const initial = await getAvailableAppointmentSlots(
+      { organizationId: orgId, serviceId, date },
+      { googleBusyProvider: noGoogleBusy }
+    );
+    expect(initial.timezone).toBe("America/New_York");
+    expect(initial.durationMinutes).toBe(30);
+    expect(initial.slots.length).toBeGreaterThan(0);
+
+    const selected = initial.slots[0];
+    const preferredTime = localTimeForAppointmentSlot(selected.startAt, initial.timezone);
+    const marker = `LIVE_STAGING_AVAILABILITY_${Date.now()}`;
+    let customerId: string | null = null;
+    let appointmentId: string | null = null;
+
+    try {
+      const customer = await service
+        .from("customers")
+        .insert({
+          organization_id: orgId,
+          full_name: marker,
+          email: `${marker.toLowerCase()}@example.invalid`,
+          mobile_phone: "000-000-0000"
+        })
+        .select("id")
+        .single();
+      expect(customer.error).toBeNull();
+      customerId = customer.data!.id;
+
+      const appointment = await service
+        .from("appointment_requests")
+        .insert({
+          organization_id: orgId,
+          customer_id: customerId,
+          status: "awaiting_review",
+          document_category: "affidavit",
+          document_count: 1,
+          signer_count: 1,
+          notarizations_not_sure: true,
+          signer_location: "Florida",
+          all_signers_have_government_id: true,
+          preferred_date: date,
+          preferred_time: preferredTime,
+          urgency: "not_urgent",
+          administrative_notes: marker
+        })
+        .select("id")
+        .single();
+      expect(appointment.error).toBeNull();
+      appointmentId = appointment.data!.id;
+
+      const afterInsert = await getAvailableAppointmentSlots(
+        { organizationId: orgId, serviceId, date },
+        { googleBusyProvider: noGoogleBusy }
+      );
+      expect(afterInsert.slots.map((slot) => slot.startAt)).not.toContain(selected.startAt);
+
+      await expect(getAvailableAppointmentSlots(
+        {
+          organizationId: orgId,
+          serviceId: "00000000-0000-4000-8000-000000000099",
+          date
+        },
+        { googleBusyProvider: noGoogleBusy }
+      )).rejects.toMatchObject({ code: "invalid_request" });
+    } finally {
+      if (appointmentId) await service.from("appointment_requests").delete().eq("id", appointmentId);
+      if (customerId) await service.from("customers").delete().eq("id", customerId);
+    }
+
+    const cleanup = await service
+      .from("customers")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .eq("full_name", marker);
+    expect(cleanup.error).toBeNull();
+    expect(cleanup.count).toBe(0);
+  });
+
   it("enforces RLS for anonymous, non-admin, and admin clients", async () => {
     const anonRead = await anon.from("appointment_requests").select("id");
     expect(anonRead.error).toBeNull();
@@ -611,3 +707,12 @@ maybeDescribe("live Supabase integration and RLS", () => {
     }
   });
 });
+
+function nextWeekdayDate(daysAhead: number) {
+  const cursor = new Date();
+  cursor.setUTCDate(cursor.getUTCDate() + daysAhead);
+  while (cursor.getUTCDay() === 0 || cursor.getUTCDay() === 6) {
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return cursor.toISOString().slice(0, 10);
+}

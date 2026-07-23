@@ -67,7 +67,13 @@ const categories = [
   ["not_sure", "Not sure"]
 ];
 
-export function BookingFlow() {
+export function BookingFlow({
+  organizationSlug,
+  serviceId
+}: {
+  organizationSlug: string;
+  serviceId: string;
+}) {
   const [draft, setDraft] = useState<Draft>(defaultDraft);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
@@ -88,24 +94,53 @@ export function BookingFlow() {
   useEffect(() => {
     let active = true;
     async function loadAvailability() {
-      if (!draft.preferredDate) return;
-      setAvailabilityLoading(true);
-      const response = await fetch(`/api/availability?date=${encodeURIComponent(draft.preferredDate)}`);
-      const result = await response.json();
-      if (!active) return;
-      const nextSlots = response.ok ? result.slots ?? [] : [];
-      setSlots(nextSlots);
-      setAvailabilityMessage(nextSlots.length === 0 ? "No booking slots are available for this date." : `Times shown use ${result.timezone}.`);
-      if (nextSlots.length > 0 && !nextSlots.includes(draft.preferredTime)) {
-        update("preferredTime", nextSlots[0]);
+      if (!draft.preferredDate) {
+        setSlots([]);
+        setAvailabilityMessage("");
+        return;
       }
-      setAvailabilityLoading(false);
+      setAvailabilityLoading(true);
+      try {
+        if (!serviceId) throw new Error("No service is configured.");
+        const query = new URLSearchParams({
+          organization: organizationSlug,
+          service: serviceId,
+          date: draft.preferredDate
+        });
+        const response = await fetch(`/api/booking/availability?${query}`);
+        const result = await response.json();
+        if (!active) return;
+        const nextSlots = response.ok && Array.isArray(result.slots)
+          ? result.slots.map((slot: { startAt: string }) => localTime(slot.startAt, result.timezone))
+          : [];
+        setSlots(nextSlots);
+        setAvailabilityMessage(
+          response.ok
+            ? nextSlots.length === 0
+              ? "No booking slots are available for this date."
+              : `Times shown use ${result.timezone}.`
+            : result.error ?? "Availability is temporarily unavailable. Please try again shortly."
+        );
+        if (nextSlots.length > 0) {
+          setDraft((current) =>
+            nextSlots.includes(current.preferredTime)
+              ? current
+              : { ...current, preferredTime: nextSlots[0] }
+          );
+        }
+      } catch {
+        if (!active) return;
+        setSlots([]);
+        setAvailabilityMessage("Availability is temporarily unavailable. Please try again shortly.");
+      } finally {
+        if (active) setAvailabilityLoading(false);
+      }
     }
     loadAvailability();
     return () => {
       active = false;
     };
-  }, [draft.preferredDate, draft.preferredTime]);
+  }, [draft.preferredDate, organizationSlug, serviceId]);
 
   const progress = Math.round(((step + 1) / steps.length) * 100);
 
@@ -327,6 +362,15 @@ export function BookingFlow() {
       `}</style>
     </main>
   );
+}
+
+function localTime(startAt: string, timezone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date(startAt));
 }
 
 function formatSlot(slot: string) {

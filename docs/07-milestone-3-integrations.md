@@ -49,17 +49,66 @@ Expired payment windows release the slot by expiring/releasing `slot_reservation
 
 Availability follows this pipeline:
 
-1. Organization timezone.
-2. Weekly operating hours.
-3. Schedule exceptions.
-4. Appointment rules.
-5. Existing active Avenseal appointments.
-6. Active payment reservations.
-7. Google Calendar busy intervals.
-8. Appointment duration and buffers.
-9. Final safe public slots.
+1. Resolve the active organization and active, remote, bookable service.
+2. Load the organization timezone and primary weekly schedule.
+3. Apply date-specific schedule exceptions.
+4. Generate candidate starts from the configured scheduling increment.
+5. Require the complete service duration and appointment buffers to fit in business hours.
+6. Apply same-day, minimum-notice, maximum-horizon, and daily-cap rules.
+7. Exclude overlapping active Avenseal appointments and active payment reservations.
+8. Read the connected primary Google Calendar with `freeBusy`.
+9. Return only final safe public slots.
 
 Calendar events are created only after successful payment confirmation. Calendar records are stored in `calendar_event_mappings`.
+
+### Calendar-aware availability service
+
+`lib/server/appointment-availability.ts` is the server-only scheduling boundary. It accepts an organization UUID, service UUID, local calendar date, and optional internal diagnostics flag. The configured organization timezone is authoritative; public clients cannot override it.
+
+The service uses the selected service's duration. Existing appointment rows do not yet store a service identifier, so their blocking duration uses the organization's default appointment duration. The scheduling increment comes from the active legacy `availability_rules.slot_minutes` row for the weekday when present. It safely defaults to 30 minutes when that compatibility setting is absent.
+
+All date/time conversion uses IANA timezone data through `@date-fns/tz`. Slots are represented as ISO timestamps with the applicable UTC offset, including across daylight-saving transitions. Conflict checks use interval overlap rather than start-time equality.
+
+When no active Google connection exists, local Avenseal availability remains available. When a connection is marked `connected`, token refresh and decryption use the existing organization-scoped OAuth helper. If token refresh or `freeBusy` fails, the service fails closed. Public callers receive a generic temporary-unavailability response; provider and database details are not exposed.
+
+The public endpoint is:
+
+```text
+GET /api/booking/availability?organization=avenseal&service=<service-uuid>&date=2026-07-30
+```
+
+Successful response:
+
+```json
+{
+  "date": "2026-07-30",
+  "timezone": "America/New_York",
+  "slots": [
+    {
+      "startAt": "2026-07-30T14:00:00-04:00",
+      "endAt": "2026-07-30T14:30:00-04:00"
+    }
+  ]
+}
+```
+
+The endpoint resolves the organization through its public slug, validates that the service belongs to that organization, applies the public rate limiter, and returns no calendar event metadata, customer data, connection details, or internal identifiers beyond the client-supplied service identifier.
+
+Current limitations:
+
+- Only the connected account's primary calendar is queried.
+- The booking flow uses the organization's first active service until customer service selection is introduced.
+- Existing appointment requests use the organization default duration for conflict checks because they do not store `service_id`.
+- This milestone reads Google Calendar availability only. It does not add Google event create, update, delete, Meet-link, or booking synchronization behavior.
+
+Run unit and staging integration coverage with:
+
+```bash
+pnpm test
+pnpm test:integration
+```
+
+Normal unit tests mock Google requests. Staging integration tests use synthetic appointments, stub Google busy data for determinism, enforce the existing staging guard, and clean up their owned fixtures.
 
 ## Google OAuth Foundation
 

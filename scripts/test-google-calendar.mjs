@@ -94,6 +94,7 @@ async function main() {
 
   const { getSupabaseAdmin } = loadTypescriptModule("lib/supabase/server.ts");
   const { getValidGoogleAccessToken } = loadTypescriptModule("lib/server/google-oauth.ts");
+  const { fetchGoogleFreeBusy } = loadTypescriptModule("lib/server/google-calendar.ts");
   const supabase = getSupabaseAdmin();
 
   const { data: rows, error } = await supabase
@@ -111,13 +112,16 @@ async function main() {
   if (!accessToken) throw new Error("Google access token was not available.");
   console.log("Access token available.");
 
-  const freeBusy = await googleJson("https://www.googleapis.com/calendar/v3/freeBusy", accessToken, {
-    method: "POST",
-    body: JSON.stringify(buildFreeBusyRequest())
+  const freeBusyRequest = buildFreeBusyRequest();
+  const busy = await fetchGoogleFreeBusy({
+    accessToken,
+    timeMin: freeBusyRequest.timeMin,
+    timeMax: freeBusyRequest.timeMax,
+    timezone: freeBusyRequest.timeZone,
+    calendarId: "primary"
   });
-  const busyCount = Array.isArray(freeBusy?.calendars?.primary?.busy) ? freeBusy.calendars.primary.busy.length : 0;
   console.log("Free/busy request succeeded.");
-  console.log(`Busy periods found: ${busyCount}`);
+  console.log(`Busy periods found: ${busy.length}`);
 
   let eventId = null;
   try {
