@@ -3,6 +3,7 @@ import { hashAppointmentAccessToken } from "@/lib/server/repository";
 import { bookingSchema, statusLinkRequestSchema } from "@/lib/validation";
 
 const validBooking = {
+  serviceId: "00000000-0000-4000-8000-000000000002",
   fullName: "Jane Morgan",
   email: "jane@example.com",
   mobilePhone: "(407) 555-0100",
@@ -36,6 +37,20 @@ describe("bookingSchema", () => {
   it("sanitizes free text fields", () => {
     const parsed = bookingSchema.parse({ ...validBooking, administrativeNotes: "<script>alert(1)</script>" });
     expect(parsed.administrativeNotes).not.toContain("<");
+  });
+
+  it("ignores client-provided service snapshots", () => {
+    const parsed = bookingSchema.parse({
+      ...validBooking,
+      serviceNameSnapshot: "Manipulated service",
+      serviceDurationMinutesSnapshot: 1,
+      servicePriceCentsSnapshot: 1,
+      serviceCurrencySnapshot: "BAD"
+    });
+    expect(parsed).not.toHaveProperty("serviceNameSnapshot");
+    expect(parsed).not.toHaveProperty("serviceDurationMinutesSnapshot");
+    expect(parsed).not.toHaveProperty("servicePriceCentsSnapshot");
+    expect(parsed).not.toHaveProperty("serviceCurrencySnapshot");
   });
 });
 

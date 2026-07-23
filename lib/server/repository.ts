@@ -4,13 +4,18 @@ import { addMinutesToTime } from "@/lib/milestone3/calendar";
 import { getServerEnv } from "@/lib/env";
 import { renderEmailSubject } from "@/lib/milestone3/email";
 import { calculatePaymentExpiration } from "@/lib/milestone3/policies";
-import { calculateCheckoutLineItem, getStandardNotarialActService } from "@/lib/milestone3/pricing";
 import { createStripeCheckoutSession } from "@/lib/milestone3/stripe";
 import {
   getAvailableAppointmentSlots,
   localTimeForAppointmentSlot
 } from "@/lib/server/appointment-availability";
 import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
+import {
+  buildAppointmentServiceSnapshot,
+  calculateAppointmentCheckoutLineItem,
+  loadBookableAppointmentService,
+  resolveAppointmentDuration
+} from "@/lib/server/appointment-services";
 import { devStore } from "@/lib/server/dev-store";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
@@ -40,6 +45,11 @@ type SupabaseAppointmentRow = {
   id: string;
   organization_id: string;
   customer_id: string;
+  service_id: string | null;
+  service_name_snapshot: string | null;
+  service_duration_minutes_snapshot: number | null;
+  service_price_cents_snapshot: number | null;
+  service_currency_snapshot: string | null;
   status: AppointmentStatus;
   customers: {
     id: string;
@@ -72,6 +82,11 @@ function mapAppointment(row: SupabaseAppointmentRow): AppointmentRequest {
     id: row.id,
     organizationId: row.organization_id,
     customerId: row.customer_id,
+    serviceId: row.service_id,
+    serviceNameSnapshot: row.service_name_snapshot,
+    serviceDurationMinutesSnapshot: row.service_duration_minutes_snapshot,
+    servicePriceCentsSnapshot: row.service_price_cents_snapshot,
+    serviceCurrencySnapshot: row.service_currency_snapshot,
     status: row.status,
     customer: {
       id: row.customers.id,
@@ -525,7 +540,11 @@ async function createCalendarEventRecord(appointment: AppointmentRequest, settin
   if (!hasSupabaseServiceConfig()) return null;
   const organizationId = appointment.organizationId;
   const startsAt = appointmentStartIso(appointment, settings.business.timezone);
-  const endsAt = appointmentEndIso(appointment, settings.business.timezone, settings.rules.defaultDurationMinutes);
+  const durationMinutes = resolveAppointmentDuration(
+    appointment.serviceDurationMinutesSnapshot,
+    settings.rules.defaultDurationMinutes
+  );
+  const endsAt = appointmentEndIso(appointment, settings.business.timezone, durationMinutes);
   let providerEventId: string | null = null;
   let status: CalendarEventMapping["status"] = "pending";
   let lastError: string | null = null;
@@ -582,10 +601,12 @@ async function createCalendarEventRecord(appointment: AppointmentRequest, settin
 export const repository = {
   async createAppointment(input: BookingInput) {
     const settings = await loadOrganizationSettings();
-    const service = settings.services.find((item) => item.isActive);
-    if (!service) throw new Error("No bookable service is configured.");
+    const organizationId = settings.business.organizationId;
+    if (!organizationId) throw new Error("Organization is not configured.");
+    const service = await loadBookableAppointmentService(organizationId, input.serviceId);
+    const snapshot = buildAppointmentServiceSnapshot(service, organizationId);
     const availability = await getAvailableAppointmentSlots({
-      organizationId: settings.business.organizationId!,
+      organizationId,
       serviceId: service.id,
       date: input.preferredDate
     });
@@ -596,9 +617,8 @@ export const repository = {
       throw new Error("Selected appointment time is outside current availability.");
     }
 
-    if (!hasSupabaseServiceConfig()) return devStore.createAppointment(input);
+    if (!hasSupabaseServiceConfig()) return devStore.createAppointment(input, snapshot);
     const supabase = getSupabaseAdmin();
-    const organizationId = settings.business.organizationId;
     const { data: customer, error: customerError } = await supabase
       .from("customers")
       .insert({
@@ -616,6 +636,11 @@ export const repository = {
       .insert({
         organization_id: organizationId,
         customer_id: customer.id,
+        service_id: snapshot.serviceId,
+        service_name_snapshot: snapshot.serviceNameSnapshot,
+        service_duration_minutes_snapshot: snapshot.serviceDurationMinutesSnapshot,
+        service_price_cents_snapshot: snapshot.servicePriceCentsSnapshot,
+        service_currency_snapshot: snapshot.serviceCurrencySnapshot,
         status: "awaiting_review",
         document_category: input.documentCategory,
         document_count: input.documentCount,
@@ -677,13 +702,64 @@ export const repository = {
     if (error) return null;
     return mapAppointment(data);
   },
-  async updateAppointment(id: string, update: { status?: AppointmentStatus; preferredDate?: string; preferredTime?: string; note?: string }) {
-    if (!hasSupabaseServiceConfig()) return devStore.updateAppointment(id, update);
+  async updateAppointment(id: string, update: { status?: AppointmentStatus; serviceId?: string; preferredDate?: string; preferredTime?: string; note?: string }) {
+    if (!hasSupabaseServiceConfig()) {
+      const previous = await devStore.getAppointment(id);
+      if (!previous) throw new Error("Appointment not found.");
+      if (update.serviceId && update.serviceId !== previous.serviceId) {
+        if (!["awaiting_review", "clarification_needed"].includes(previous.status)) {
+          throw new Error("The service cannot be changed after payment approval.");
+        }
+        const service = await loadBookableAppointmentService(previous.organizationId, update.serviceId);
+        const requestedDate = update.preferredDate ?? previous.preferredDate;
+        const requestedTime = normalizeTime(update.preferredTime ?? previous.preferredTime);
+        const availability = await getAvailableAppointmentSlots({
+          organizationId: previous.organizationId,
+          serviceId: service.id,
+          date: requestedDate,
+          excludeAppointmentId: previous.id
+        });
+        if (!availability.slots.some((slot) =>
+          localTimeForAppointmentSlot(slot.startAt, availability.timezone) === requestedTime
+        )) {
+          throw new Error("Selected appointment time is outside current availability.");
+        }
+      }
+      return devStore.updateAppointment(id, update);
+    }
     const supabase = getSupabaseAdmin();
     const previous = await repository.getAppointment(id);
     if (!previous) throw new Error("Appointment not found.");
     const organizationId = previous.organizationId;
     const patch: Record<string, unknown> = {};
+    const serviceChanged = Boolean(update.serviceId && update.serviceId !== previous.serviceId);
+    if (serviceChanged) {
+      if (!["awaiting_review", "clarification_needed"].includes(previous.status)) {
+        throw new Error("The service cannot be changed after payment approval.");
+      }
+      const service = await loadBookableAppointmentService(organizationId, update.serviceId!);
+      const snapshot = buildAppointmentServiceSnapshot(service, organizationId);
+      const requestedDate = update.preferredDate ?? previous.preferredDate;
+      const requestedTime = normalizeTime(update.preferredTime ?? previous.preferredTime);
+      const availability = await getAvailableAppointmentSlots({
+        organizationId,
+        serviceId: service.id,
+        date: requestedDate,
+        excludeAppointmentId: previous.id
+      });
+      if (!availability.slots.some((slot) =>
+        localTimeForAppointmentSlot(slot.startAt, availability.timezone) === requestedTime
+      )) {
+        throw new Error("Selected appointment time is outside current availability.");
+      }
+      Object.assign(patch, {
+        service_id: snapshot.serviceId,
+        service_name_snapshot: snapshot.serviceNameSnapshot,
+        service_duration_minutes_snapshot: snapshot.serviceDurationMinutesSnapshot,
+        service_price_cents_snapshot: snapshot.servicePriceCentsSnapshot,
+        service_currency_snapshot: snapshot.serviceCurrencySnapshot
+      });
+    }
     if (update.status) patch.status = update.status;
     if (update.preferredDate) patch.preferred_date = update.preferredDate;
     if (update.preferredTime) patch.preferred_time = update.preferredTime;
@@ -717,6 +793,18 @@ export const repository = {
         organization_id: organizationId,
         appointment_request_id: id,
         body: update.note
+      });
+    }
+    if (serviceChanged) {
+      await supabase.from("audit_logs").insert({
+        organization_id: organizationId,
+        action: "appointment.service_changed",
+        entity_type: "appointment_request",
+        entity_id: id,
+        metadata: {
+          fromServiceId: previous.serviceId,
+          toServiceId: update.serviceId
+        }
       });
     }
     return mapAppointment(data);
@@ -855,19 +943,25 @@ export const repository = {
 
     const existingPayment = existingPayments?.[0];
     const settings = await loadOrganizationSettings();
-    const service = getStandardNotarialActService(settings.services);
-    if (!service) throw new Error("Approved standard notarial act service is not configured.");
+    if (!appointment.serviceId || !appointment.serviceNameSnapshot) {
+      throw new Error("Appointment service must be assigned before payment approval.");
+    }
     if (
       existingPayment?.checkout_url &&
       existingPayment.expires_at &&
       new Date(String(existingPayment.expires_at)).getTime() > Date.now()
     ) {
       const payment = mapPayment(existingPayment);
-      const delivery = await deliverPaymentRequestEmail({ appointment, payment, settings, serviceName: service.customerName });
+      const delivery = await deliverPaymentRequestEmail({
+        appointment,
+        payment,
+        settings,
+        serviceName: appointment.serviceNameSnapshot
+      });
       return { payment, delivery };
     }
 
-    const lineItem = calculateCheckoutLineItem(service);
+    const lineItem = calculateAppointmentCheckoutLineItem(appointment);
     const expiresAt = calculatePaymentExpiration(new Date(), appointment.preferredDate, settings.rules);
     const idempotencyKey = `payment-link-${appointment.id}-${randomUUID()}`;
     const env = getServerEnv();
@@ -884,7 +978,7 @@ export const repository = {
         cancelUrl: `${siteUrl}/booking/confirmation?payment=cancelled`,
         customerEmail: appointment.customer.email,
         lineItem,
-        metadata: { appointment_id: appointment.id, organization_id: organizationId, service_id: service.id },
+        metadata: { appointment_id: appointment.id, organization_id: organizationId, service_id: appointment.serviceId },
         expiresAt: Math.floor(expiresAt.getTime() / 1000)
       });
       checkoutSessionId = session.id;
@@ -897,7 +991,7 @@ export const repository = {
       .insert({
         organization_id: organizationId,
         appointment_request_id: appointment.id,
-        service_id: service.id,
+        service_id: appointment.serviceId,
         amount_cents: lineItem.amountCents,
         currency: lineItem.currency,
         status: "payment_link_created",
@@ -916,7 +1010,10 @@ export const repository = {
       appointment_request_id: appointment.id,
       reserved_date: appointment.preferredDate,
       reserved_time: appointment.preferredTime,
-      duration_minutes: settings.rules.defaultDurationMinutes,
+      duration_minutes: resolveAppointmentDuration(
+        appointment.serviceDurationMinutesSnapshot,
+        settings.rules.defaultDurationMinutes
+      ),
       status: "active",
       expires_at: expiresAt.toISOString()
     });
@@ -934,7 +1031,12 @@ export const repository = {
       reason: "Approved for payment. Payment link created."
     });
     const mappedPayment = mapPayment(payment);
-    const delivery = await deliverPaymentRequestEmail({ appointment, payment: mappedPayment, settings, serviceName: service.customerName });
+    const delivery = await deliverPaymentRequestEmail({
+      appointment,
+      payment: mappedPayment,
+      settings,
+      serviceName: appointment.serviceNameSnapshot
+    });
     await supabase.from("audit_logs").insert({
       organization_id: organizationId,
       action: "payment.link_created",
@@ -1059,10 +1161,6 @@ export const repository = {
       .limit(1);
     if (paymentError && paymentError.code !== "PGRST205") throw paymentError;
     const payment = paymentRows?.[0] ? mapPayment(paymentRows[0]) : null;
-    const service = payment
-      ? settings.services.find((item) => item.id === payment.serviceId) ?? getStandardNotarialActService(settings.services)
-      : getStandardNotarialActService(settings.services);
-
     return {
       reference: referenceCode(appointment.id),
       customerName: appointment.customer.fullName,
@@ -1072,10 +1170,10 @@ export const repository = {
       preferredDate: appointment.preferredDate,
       preferredTime: appointment.preferredTime,
       timezone: settings.business.timezone,
-      serviceName: service?.customerName ?? "Remote online notarization appointment",
+      serviceName: appointment.serviceNameSnapshot ?? "Remote online notarization appointment",
       paymentStatus: payment?.status ?? null,
-      amountDueCents: payment?.amountCents ?? service?.basePriceCents ?? null,
-      currency: payment?.currency ?? service?.currency ?? "USD",
+      amountDueCents: payment?.amountCents ?? appointment.servicePriceCentsSnapshot,
+      currency: payment?.currency ?? appointment.serviceCurrencySnapshot ?? "USD",
       checkoutUrl: payment?.status === "payment_link_created" ? payment.checkoutUrl : null,
       paymentExpiresAt: payment?.expiresAt ?? null,
       businessName: settings.business.businessName,

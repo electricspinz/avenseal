@@ -116,9 +116,11 @@ async function loginAdmin(page: import("@playwright/test").Page) {
 }
 
 async function createSyntheticAppointment(page: import("@playwright/test").Page) {
+  const serviceId = await resolveBookingServiceId(page);
   const available = await findAvailableSlot(page, 90);
   const response = await page.request.post("/api/appointments", {
     data: {
+      serviceId,
       fullName: "E2E Admin Fixture",
       email: "e2e-admin-fixture@example.invalid",
       mobilePhone: "000-000-0000",
@@ -141,6 +143,17 @@ async function createSyntheticAppointment(page: import("@playwright/test").Page)
     }
   });
   expect(response.ok()).toBeTruthy();
+}
+
+async function resolveBookingServiceId(page: import("@playwright/test").Page) {
+  const requestPromise = page.waitForRequest((request) =>
+    request.url().includes("/api/booking/availability?")
+  );
+  await page.goto("/book");
+  const request = await requestPromise;
+  const serviceId = new URL(request.url()).searchParams.get("service");
+  expect(serviceId).toMatch(/^[0-9a-f-]{36}$/i);
+  return serviceId!;
 }
 
 async function findAvailableSlot(page: import("@playwright/test").Page, offsetDays: number) {

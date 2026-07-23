@@ -46,6 +46,7 @@ const text = (max = 200) => z.string().transform((value) => sanitizeText(value, 
 
 export const bookingSchema = z
   .object({
+    serviceId: z.string().uuid("Select a valid service."),
     fullName: text(120).pipe(z.string().min(2, "Enter your full name.")),
     email: z.string().trim().email("Enter a valid email address.").max(180),
     mobilePhone: z.string().trim().min(10, "Enter a mobile phone number.").max(30),
@@ -77,6 +78,7 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 
 export const adminUpdateSchema = z.object({
   status: z.enum(appointmentStatuses).optional(),
+  serviceId: z.string().uuid().optional(),
   preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   preferredTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   note: text(1000).optional()

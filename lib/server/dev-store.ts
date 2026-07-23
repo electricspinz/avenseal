@@ -14,6 +14,7 @@ import type {
   StatusHistoryEntry
 } from "@/lib/types";
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
+import type { AppointmentServiceSnapshot } from "@/lib/server/appointment-services";
 
 const organizationId = "00000000-0000-4000-8000-000000000001";
 const serviceId = "00000000-0000-4000-8000-000000000002";
@@ -116,6 +117,11 @@ const appointments: AppointmentRequest[] = [
     organizationId,
     customerId: "dev_customer_1",
     customer: customers[0],
+    serviceId,
+    serviceNameSnapshot: services[0].customerName,
+    serviceDurationMinutesSnapshot: services[0].defaultDurationMinutes,
+    servicePriceCentsSnapshot: services[0].basePriceCents,
+    serviceCurrencySnapshot: services[0].currency,
     status: "awaiting_review",
     documentCategory: "affidavit",
     documentCount: 1,
@@ -149,7 +155,7 @@ const history: StatusHistoryEntry[] = [
 const notes: InternalNote[] = [];
 
 export const devStore = {
-  async createAppointment(input: BookingInput) {
+  async createAppointment(input: BookingInput, snapshot: AppointmentServiceSnapshot) {
     const timestamp = new Date().toISOString();
     const customer: Customer = {
       id: id("customer"),
@@ -165,6 +171,11 @@ export const devStore = {
       organizationId,
       customerId: customer.id,
       customer,
+      serviceId: snapshot.serviceId,
+      serviceNameSnapshot: snapshot.serviceNameSnapshot,
+      serviceDurationMinutesSnapshot: snapshot.serviceDurationMinutesSnapshot,
+      servicePriceCentsSnapshot: snapshot.servicePriceCentsSnapshot,
+      serviceCurrencySnapshot: snapshot.serviceCurrencySnapshot,
       status: "awaiting_review",
       documentCategory: input.documentCategory,
       documentCount: input.documentCount,
@@ -200,7 +211,13 @@ export const devStore = {
   async getAppointment(idValue: string) {
     return appointments.find((appointment) => appointment.id === idValue) ?? null;
   },
-  async updateAppointment(idValue: string, update: { status?: AppointmentStatus; preferredDate?: string; preferredTime?: string; note?: string }) {
+  async updateAppointment(idValue: string, update: {
+    status?: AppointmentStatus;
+    preferredDate?: string;
+    preferredTime?: string;
+    serviceId?: string;
+    note?: string;
+  }) {
     const appointment = appointments.find((item) => item.id === idValue);
     if (!appointment) return null;
     const previous = appointment.status;
@@ -217,6 +234,22 @@ export const devStore = {
     }
     if (update.preferredDate) appointment.preferredDate = update.preferredDate;
     if (update.preferredTime) appointment.preferredTime = update.preferredTime;
+    if (update.serviceId && update.serviceId !== appointment.serviceId) {
+      if (!["awaiting_review", "clarification_needed"].includes(appointment.status)) {
+        throw new Error("The service cannot be changed after payment approval.");
+      }
+      const service = services.find((item) =>
+        item.id === update.serviceId &&
+        item.isActive &&
+        item.deliveryType === "remote"
+      );
+      if (!service) throw new Error("The selected service is unavailable.");
+      appointment.serviceId = service.id;
+      appointment.serviceNameSnapshot = service.customerName;
+      appointment.serviceDurationMinutesSnapshot = service.defaultDurationMinutes;
+      appointment.servicePriceCentsSnapshot = service.basePriceCents;
+      appointment.serviceCurrencySnapshot = service.currency;
+    }
     if (update.note) {
       notes.unshift({
         id: id("note"),
@@ -258,6 +291,22 @@ export const devStore = {
           ["awaiting_review", "awaiting_payment", "confirmed", "ready", "follow_up_required"].includes(appointment.status)
         )
         .map((appointment) => appointment.preferredTime.slice(0, 5))
+    );
+  },
+  async getBlockingAppointments(date: string, excludeAppointmentId?: string) {
+    return appointments.filter((appointment) =>
+      appointment.id !== excludeAppointmentId &&
+      appointment.preferredDate === date &&
+      [
+        "awaiting_review",
+        "awaiting_payment",
+        "clarification_needed",
+        "approved_pending_payment",
+        "payment_processing",
+        "confirmed",
+        "ready",
+        "follow_up_required"
+      ].includes(appointment.status)
     );
   },
   async updateOrganizationSettings(input: OrganizationSettingsInput): Promise<OrganizationSettings> {

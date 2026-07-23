@@ -19,7 +19,10 @@ Avenseal charges `2500` cents for one active organization service:
 
 Avenseal does not charge a separate technology fee, coordination fee, same-day fee, after-hours fee, weekend fee, convenience fee, or tip.
 
-Pricing is read from `organization_services`. Checkout code must not trust browser-supplied prices.
+New appointments copy pricing from `organization_services` into integer-cent booking snapshots.
+Checkout uses the appointment's booking-time price and currency snapshots and never trusts
+browser-supplied prices. After a payment row exists, its amount is the authoritative transaction
+amount for customer and administrative payment history.
 
 ## Payment Lifecycle
 
@@ -65,7 +68,13 @@ Calendar events are created only after successful payment confirmation. Calendar
 
 `lib/server/appointment-availability.ts` is the server-only scheduling boundary. It accepts an organization UUID, service UUID, local calendar date, and optional internal diagnostics flag. The configured organization timezone is authoritative; public clients cannot override it.
 
-The service uses the selected service's duration. Existing appointment rows do not yet store a service identifier, so their blocking duration uses the organization's default appointment duration. The scheduling increment comes from the active legacy `availability_rules.slot_minutes` row for the weekday when present. It safely defaults to 30 minutes when that compatibility setting is absent.
+The service uses the selected service's duration for candidate slots and each existing
+appointment's `service_duration_minutes_snapshot` for conflicts. Migration `0009` backfills
+appointments only when the organization has exactly one active service. Ambiguous historical
+appointments remain unassigned; the isolated `resolveAppointmentDuration` helper uses the
+organization default only for those legacy rows. The scheduling increment comes from the active
+legacy `availability_rules.slot_minutes` row for the weekday when present. It safely defaults to
+30 minutes when that compatibility setting is absent.
 
 All date/time conversion uses IANA timezone data through `@date-fns/tz`. Slots are represented as ISO timestamps with the applicable UTC offset, including across daylight-saving transitions. Conflict checks use interval overlap rather than start-time equality.
 
@@ -98,7 +107,8 @@ Current limitations:
 
 - Only the connected account's primary calendar is queried.
 - The booking flow uses the organization's first active service until customer service selection is introduced.
-- Existing appointment requests use the organization default duration for conflict checks because they do not store `service_id`.
+- Ambiguous pre-`0009` appointment rows without a defensible service assignment retain the
+  organization-default duration fallback.
 - This milestone reads Google Calendar availability only. It does not add Google event create, update, delete, Meet-link, or booking synchronization behavior.
 
 Run unit and staging integration coverage with:

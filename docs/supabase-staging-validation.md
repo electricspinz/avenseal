@@ -1,10 +1,10 @@
 # Supabase Staging Validation
 
-Date: 2026-07-22
+Date: 2026-07-23
 
 ## Scope
 
-This document records the staging validation checkpoint for Avenseal's Supabase project after migrations `0001` through `0008` were pushed to the dedicated staging project.
+This document records the staging validation checkpoint for Avenseal's Supabase project after migrations `0001` through `0009` were pushed to the dedicated staging project.
 
 No production database was used or modified.
 
@@ -59,8 +59,23 @@ Do not store staging credential values in GitHub Actions, committed source files
 - `0006`
 - `0007`
 - `0008`
+- `0009`
 
-No migrations were reapplied during this validation pass.
+Migration `0009` was the only pending migration and was applied once to staging.
+
+## Migration 0009 Appointment Snapshots
+
+Migration `0009_appointment_service_snapshots.sql` adds the service reference plus immutable
+booking-time name, duration, integer-cent price, and currency snapshots to
+`appointment_requests`.
+
+- Existing appointments are backfilled only for organizations with exactly one active service.
+- Ambiguous historical rows remain nullable and retain the documented legacy duration fallback.
+- The tenant-safe composite foreign key uses `ON DELETE RESTRICT`.
+- Snapshot completeness, duration, price, and currency constraints are active.
+- A write trigger derives snapshot values from an active, remote, bookable service and rejects
+  direct snapshot edits while the assigned service is unchanged.
+- Explicit service reassignment refreshes all snapshots in one appointment update.
 
 ## Migration 0008 Expected Schema
 
@@ -156,11 +171,11 @@ Latest command results:
 
 - `pnpm typecheck`: passed
 - `pnpm lint`: passed
-- `pnpm test`: passed
+- `pnpm test`: passed, 90 unit tests
 - `pnpm seed:staging`: passed
 - `pnpm seed:staging` second run: passed, confirming idempotency
-- `pnpm test:integration`: passed
-- `E2E_PORT=3100 pnpm test:e2e`: passed
+- `pnpm test:integration`: passed, 12 live staging tests
+- `E2E_PORT=3100 pnpm test:e2e`: passed, 10 desktop/mobile tests
 - `pnpm build`: passed
 
 The first E2E attempt found that the admin appointment-list test depended on another parallel test creating an appointment first. The E2E test now creates its own synthetic booking through the public booking API before asserting the admin list state.
@@ -183,7 +198,7 @@ Staging is structurally prepared for Google OAuth live testing once the staging 
 Before running Google OAuth:
 
 1. Confirm the staging Supabase link still classifies as staging.
-2. Confirm migration history still aligns through `0008`.
+2. Confirm migration history still aligns through `0009`.
 3. Confirm `LIVE_SUPABASE_ENVIRONMENT=staging`.
 4. Configure the Google test OAuth client variables in ignored local or staging environment configuration.
 5. Do not configure the deprecated static `GOOGLE_CALENDAR_ACCESS_TOKEN` for the OAuth live test.
