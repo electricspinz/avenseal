@@ -54,7 +54,7 @@ export function CustomerAppointmentPortal({
 }) {
   const isConfirmed = status.status === "confirmed" || status.status === "ready";
   const activeStep = timelineIndex(status.status, status.paymentStatus);
-  const meetingLink: string | null = null;
+  const meetingLink = status.meetingUrl;
 
   return (
     <section className="bg-white px-5 py-8 sm:py-12 lg:px-8">

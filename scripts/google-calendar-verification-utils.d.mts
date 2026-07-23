@@ -19,4 +19,9 @@ export type GoogleCalendarEventInput = {
 
 export function buildFreeBusyRequest(now?: Date): GoogleFreeBusyRequest;
 export function buildTemporaryEvent(now?: Date): GoogleCalendarEventInput;
+export function buildStagingAppointmentSchedule(now?: Date): {
+  date: string;
+  initialTime: string;
+  updatedTime: string;
+};
 export function assertGoogleEventCreated(event: unknown): void;

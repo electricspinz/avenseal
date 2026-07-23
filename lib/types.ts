@@ -239,17 +239,25 @@ export interface CustomerAppointmentStatus {
   businessName: string;
   businessEmail: string;
   businessPhone: string;
+  meetingUrl: string | null;
 }
 
 export interface CalendarEventMapping {
   id: string;
   appointmentRequestId: string;
+  calendarId: string;
   providerEventId: string | null;
   status: "pending" | "created" | "updated" | "cancelled" | "failed";
   startsAt: string;
   endsAt: string;
   timezone: string;
+  meetUrl: string | null;
+  providerEtag: string | null;
+  retryCount: number;
+  lastSyncedAt: string | null;
+  lastAttemptedAt: string | null;
   lastError: string | null;
+  lastErrorAt: string | null;
 }
 
 export interface CommunicationMessage {
