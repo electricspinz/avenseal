@@ -4,7 +4,7 @@ Priority: P0 highest, P1 planned, P2 later. Status: Proposed unless noted.
 
 | ID | Title | Category | Problem | Customer value | Priority | Status | Dependencies | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| COM-001 | Scheduled communication queue processor | Communications | Jobs need timed processing | Reliable updates | P0 | Active | PR #11 | Initial queue processing is opportunistic; scheduler remains required |
+| COM-001 | Scheduled communication queue processor | Communications | Jobs need timed processing | Reliable updates | P0 | Active | PR #11 | Protected worker endpoint is ready; scheduler configuration remains deployment work |
 | CAL-001 | Scheduled Calendar retry processor | Calendars | Retries are manual | Fewer missed syncs | P1 | Proposed | Calendar mappings | Protected endpoint exists |
 | POR-001 | Customer rescheduling | Customer portal | Changes require staff | Self-service | P1 | Proposed | Secure portal | Policy required |
 | POR-002 | Customer cancellation | Customer portal | Cancellations require staff | Self-service | P1 | Proposed | Secure portal | Policy required |

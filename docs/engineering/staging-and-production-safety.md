@@ -10,6 +10,8 @@ Use explicit live-test flags, safe recipient configuration, synthetic fixtures, 
 
 For SMTP-backed communications in staging, set `COMMUNICATION_SAFE_RECIPIENTS` to a comma-separated allowlist. When `LIVE_SUPABASE_ENVIRONMENT=staging`, delivery to any other recipient is skipped and recorded without sending email.
 
+The communications worker endpoint requires a server-only bearer secret. Exercise it only with synthetic queued records and an allowlisted staging recipient; its count-only response must not be treated as proof of provider delivery without checking the persisted staging record.
+
 Production is not a development test environment. Production mutations require a separately authorized rollout. Store secrets in ignored local or deployment configuration; never log secrets, tokens, full secure links, or customer data. Verify staging behavior before promotion.
 
 Detailed staging evidence and prerequisites are maintained in [Supabase staging validation](../supabase-staging-validation.md) and [Google OAuth live testing](../google-oauth-live-test.md).
