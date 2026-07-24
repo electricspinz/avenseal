@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
 
-export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification";
+export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
 
 export type QueuedEmail = {
   organizationId: string;
