@@ -81,6 +81,13 @@ pnpm test:e2e
 pnpm build
 ```
 
+## Documentation
+
+- [Product vision](docs/product/vision.md), [roadmap](docs/product/roadmap.md), and [milestones](docs/product/milestones.md)
+- [Architecture overview](docs/architecture/overview.md) and [architecture decisions](docs/architecture/decisions/README.md)
+- [Development workflow](docs/engineering/development-workflow.md) and [testing strategy](docs/engineering/testing-strategy.md)
+- [Technical debt backlog](docs/technical-debt/backlog.md) and [release notes](docs/product/release-notes.md)
+
 ## Deployment
 
 Deploy to Vercel with the variables from `.env.example`. Set secrets in the hosting platform's environment-variable settings, not in source control. Supabase service-role keys, Stripe secrets, SMTP passwords, Google client secrets, webhook secrets, and access tokens must remain server-side. Only `NEXT_PUBLIC_*` variables are intentionally browser-visible.
