@@ -85,7 +85,11 @@ let communications: CommunicationSettings = {
   emailRemindersEnabled: false,
   smsRemindersEnabled: false,
   reviewRequestsEnabled: false,
-  confirmationMessagingEnabled: false
+  confirmationMessagingEnabled: false,
+  reminder24hMinutesBefore: 1440,
+  reminder2hMinutesBefore: 120,
+  followupMinutesAfter: 1440,
+  reviewRequestMinutesAfter: 2880
 };
 
 let concierge: AiConciergeSettings = {
@@ -349,6 +353,7 @@ export const devStore = {
       deliveryType: "remote"
     }];
     communications = {
+      ...communications,
       senderName: input.senderName,
       replyToEmail: input.replyToEmail,
       supportPhone: input.communicationSupportPhone,

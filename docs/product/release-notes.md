@@ -7,6 +7,7 @@
 - Product and engineering documentation system.
 - A database-backed, Gmail-backed communications queue foundation for booking and payment-status emails.
 - A protected, scheduler-compatible communications queue worker with bounded batches and stale-claim recovery.
+- Appointment reminder scheduling and promotion into the communications queue.
 
 ### Changed
 
