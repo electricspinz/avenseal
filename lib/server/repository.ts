@@ -395,50 +395,6 @@ function paymentEmailHtml(input: {
   `;
 }
 
-function statusEmailHtml(input: {
-  customerName: string;
-  statusUrl: string;
-  supportEmail: string;
-  supportPhone: string;
-}) {
-  return `
-    <p>Hi ${input.customerName},</p>
-    <p>You can securely check your Avenseal appointment status using the link below.</p>
-    <p><a href="${input.statusUrl}">Check Appointment Status</a></p>
-    <p>Questions? Contact ${input.supportEmail}${input.supportPhone ? ` or ${input.supportPhone}` : ""}.</p>
-  `;
-}
-
-async function recordCommunication(input: {
-  appointment: AppointmentRequest;
-  messageType: string;
-  subject: string;
-  status?: "queued" | "sent" | "failed" | "skipped";
-  lastError?: string;
-  providerMessageId?: string | null;
-}) {
-  if (!hasSupabaseServiceConfig()) return null;
-  const organizationId = await resolvePublicOrganizationId();
-  const { data, error } = await getSupabaseAdmin()
-    .from("communication_messages")
-    .insert({
-      organization_id: organizationId,
-      appointment_request_id: input.appointment.id,
-      customer_id: input.appointment.customerId,
-      message_type: input.messageType,
-      recipient_email: input.appointment.customer.email,
-      subject: input.subject,
-      status: input.status ?? "queued",
-      provider_message_id: input.providerMessageId ?? null,
-      last_error: input.lastError ?? null,
-      sent_at: input.status === "sent" ? new Date().toISOString() : null
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return mapCommunication(data);
-}
-
 async function createAppointmentAccessLink(appointment: AppointmentRequest, reason: string) {
   if (!hasSupabaseServiceConfig()) return null;
   const organizationId = appointment.organizationId;
