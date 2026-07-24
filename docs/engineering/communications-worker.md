@@ -8,6 +8,8 @@ Set `COMMUNICATION_PROCESSOR_SECRET` to a strong server-only secret. Optional co
 
 ## Invocation
 
+GitHub Actions runs the protected processors every five minutes. The scheduler invokes the reminder processor first and only invokes this worker after that request succeeds. See [communications-scheduler.md](communications-scheduler.md) for deployment, secret rotation, failure handling, and manual-run instructions.
+
 An external scheduler may POST every 1–5 minutes:
 
 ```text

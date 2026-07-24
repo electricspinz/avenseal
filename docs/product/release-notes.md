@@ -7,6 +7,7 @@
 - Product and engineering documentation system.
 - A database-backed, Gmail-backed communications queue foundation for booking and payment-status emails.
 - A protected, scheduler-compatible communications queue worker with bounded batches and stale-claim recovery.
+- A GitHub Actions scheduler that promotes due reminders before processing queued communications every five minutes.
 
 ### Changed
 
@@ -26,7 +27,7 @@
 
 ### Known limitations
 
-- Communications scheduling and automated Calendar retry processing remain planned work.
+- Automated Calendar retry processing remains planned work. Communications scheduling requires production GitHub and application secrets before activation.
 
 ## Platform milestones to date
 
