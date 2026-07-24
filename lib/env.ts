@@ -53,6 +53,11 @@ const environmentSchema = z.object({
   SMTP_SECURE: optionalBooleanString,
   SMTP_USER: optionalEmail,
   SMTP_PASSWORD: optionalString,
+  COMMUNICATION_PROCESSOR_SECRET: optionalString,
+  COMMUNICATION_PROCESSOR_BATCH_SIZE: optionalPositiveInt.default(10),
+  COMMUNICATION_PROCESSING_TIMEOUT_MINUTES: optionalPositiveInt.default(10),
+  COMMUNICATION_SAFE_RECIPIENTS: optionalString,
+  LIVE_SUPABASE_ENVIRONMENT: optionalString,
 
   E2E_PORT: optionalPositiveInt,
   PLAYWRIGHT_BASE_URL: optionalUrl,
