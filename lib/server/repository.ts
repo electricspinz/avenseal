@@ -21,6 +21,7 @@ import {
 } from "@/lib/server/appointment-services";
 import { devStore } from "@/lib/server/dev-store";
 import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/communications";
+import { cancelAppointmentReminders, scheduleAppointmentReminders } from "@/lib/server/appointment-reminders";
 import type { EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
@@ -272,7 +273,11 @@ function mapCommunications(row: SupabaseRow | null): CommunicationSettings {
     emailRemindersEnabled: Boolean(row?.email_reminders_enabled ?? false),
     smsRemindersEnabled: Boolean(row?.sms_reminders_enabled ?? false),
     reviewRequestsEnabled: Boolean(row?.review_requests_enabled ?? false),
-    confirmationMessagingEnabled: Boolean(row?.confirmation_messaging_enabled ?? false)
+    confirmationMessagingEnabled: Boolean(row?.confirmation_messaging_enabled ?? false),
+    reminder24hMinutesBefore: Number(row?.reminder_24h_minutes_before ?? 1440),
+    reminder2hMinutesBefore: Number(row?.reminder_2h_minutes_before ?? 120),
+    followupMinutesAfter: Number(row?.followup_minutes_after ?? 1440),
+    reviewRequestMinutesAfter: Number(row?.review_request_minutes_after ?? 2880)
   };
 }
 
@@ -571,6 +576,12 @@ export const repository = {
       consented_at: new Date().toISOString()
     });
     const mappedAppointment = mapAppointment(appointment);
+    await scheduleAppointmentReminders(supabase, {
+      organizationId,
+      appointmentId: mappedAppointment.id,
+      startsAt: new Date(`${mappedAppointment.preferredDate}T${mappedAppointment.preferredTime}:00-04:00`),
+      settings: settings.communications
+    });
     await sendStatusLink(mappedAppointment, "appointment_request_received");
     return mappedAppointment;
   },
@@ -703,6 +714,17 @@ export const repository = {
       });
     }
     const mapped = mapAppointment(data);
+    if (update.status === "cancelled") await cancelAppointmentReminders(supabase, id);
+    if (update.preferredDate || update.preferredTime) {
+      await cancelAppointmentReminders(supabase, id);
+      const settings = await loadOrganizationSettings();
+      await scheduleAppointmentReminders(supabase, {
+        organizationId,
+        appointmentId: id,
+        startsAt: new Date(`${mapped.preferredDate}T${mapped.preferredTime}:00-04:00`),
+        settings: settings.communications
+      });
+    }
     const calendarRelevantUpdate =
       (update.status !== undefined && ["confirmed", "ready", "cancelled"].includes(update.status)) ||
       (["confirmed", "ready"].includes(previous.status) &&
