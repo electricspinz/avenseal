@@ -120,7 +120,10 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
             <h2 className="text-xl font-semibold text-navy">Communications</h2>
             <div className="mt-4 space-y-3 text-sm text-slateDeep">
               {communications.map((message) => (
-                <p key={message.id}><span className="font-semibold text-navy">{message.messageType.replaceAll("_", " ")}</span> · {message.status} · {message.subject}</p>
+                <div key={message.id}>
+                  <p><span className="font-semibold text-navy">{message.messageType.replaceAll("_", " ")}</span> · {message.status} · {message.recipientEmail}</p>
+                  <p className="text-xs">Attempts: {message.attemptCount} · {message.sentAt ? `Sent ${new Date(message.sentAt).toLocaleString()}` : message.lastError ?? "Pending delivery"}</p>
+                </div>
               ))}
               {communications.length === 0 && <p>No messages recorded yet.</p>}
             </div>

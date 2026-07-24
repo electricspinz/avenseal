@@ -266,7 +266,9 @@ export interface CommunicationMessage {
   messageType: string;
   recipientEmail: string;
   subject: string;
-  status: "queued" | "sent" | "delivered" | "failed" | "skipped";
+  status: "queued" | "processing" | "sent" | "delivered" | "failed" | "skipped" | "cancelled";
+  attemptCount: number;
+  lastAttemptedAt: string | null;
   sentAt: string | null;
   lastError: string | null;
 }
