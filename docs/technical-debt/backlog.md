@@ -6,7 +6,7 @@
 | TD-002 | Retry uses protected endpoint | Google integrations | Operator action required | Low | P2 | Accepted tradeoff | PR #10 | Replace after scheduler exists |
 | TD-003 | GoTrue multiple-client warning | Integration tests | Test noise | Low | P2 | Open | Staging tests | Consolidate test clients where safe |
 | TD-004 | Legacy duration fallback | Appointments | Ambiguous history fallback | Medium | P2 | Accepted tradeoff | PR #9 | Resolve only with defensible data |
-| TD-005 | Communications cron absent | Communications | Timed delivery incomplete | High | P0 | Open | PR #11 | Implement queue processor |
+| TD-005 | Communications scheduler absent | Communications | Timed delivery and deferred retries are incomplete | High | P0 | Open | PR #11 | Add a bounded scheduled queue processor |
 | TD-006 | Monitoring and alerting informal | Operations | Slow incident detection | High | P1 | Open | Platform foundation | Define alerts and ownership |
 | TD-007 | Webhook replay tooling incomplete | Payments | Recovery effort | Medium | P1 | Open | Stripe foundation | Add authenticated replay workflow |
 | TD-008 | Provider delivery reconciliation | Communications | Delivery uncertainty | Medium | P1 | Open | PR #11 | Persist/reconcile provider events |

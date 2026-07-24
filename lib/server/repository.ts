@@ -20,7 +20,8 @@ import {
   resolveAppointmentDuration
 } from "@/lib/server/appointment-services";
 import { devStore } from "@/lib/server/dev-store";
-import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
+import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/communications";
+import type { EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 import type {
@@ -256,6 +257,8 @@ function mapCommunication(row: SupabaseRow): CommunicationMessage {
     recipientEmail: String(row.recipient_email),
     subject: String(row.subject),
     status: String(row.status) as CommunicationMessage["status"],
+    attemptCount: Number(row.attempt_count ?? 0),
+    lastAttemptedAt: stringOrNull(row.last_attempted_at),
     sentAt: stringOrNull(row.sent_at),
     lastError: stringOrNull(row.last_error)
   };
@@ -465,23 +468,20 @@ async function sendStatusLink(appointment: AppointmentRequest, messageType: "app
   const access = await createAppointmentAccessLink(appointment, messageType);
   if (!access) return null;
   const subject = renderEmailSubject(messageType, settings.business.businessName);
-  const delivery = await sendEmailIfConfigured({
-    to: appointment.customer.email,
+  return enqueueAndProcessEmail(getSupabaseAdmin(), {
+    organizationId: appointment.organizationId,
+    appointmentId: appointment.id,
+    customerId: appointment.customerId,
+    type: messageType === "appointment_request_received" ? "booking_confirmation" : messageType,
+    recipient: appointment.customer.email,
     subject,
-    html: statusEmailHtml({
-      customerName: appointment.customer.fullName,
-      statusUrl: access.url,
-      supportEmail: settings.business.supportEmail,
-      supportPhone: settings.business.supportPhone
+    html: renderEmailTemplate({
+      greetingName: appointment.customer.fullName,
+      body: "Your Avenseal appointment request has been received. You can securely check its status using the link below.",
+      actionLabel: "Check Appointment Status",
+      actionUrl: access.url,
+      footer: `Questions? Contact ${settings.business.supportEmail}${settings.business.supportPhone ? ` or ${settings.business.supportPhone}` : ""}.`
     })
-  });
-  return recordCommunication({
-    appointment,
-    messageType,
-    subject,
-    status: delivery.status,
-    providerMessageId: delivery.providerMessageId,
-    lastError: delivery.error ?? undefined
   });
 }
 
@@ -494,8 +494,12 @@ async function deliverPaymentRequestEmail(input: {
   try {
     const statusAccess = await createAppointmentAccessLink(input.appointment, "payment_required");
     const subject = renderEmailSubject("payment_required", input.settings.business.businessName);
-    const delivery = await sendEmailIfConfigured({
-      to: input.appointment.customer.email,
+    const delivery = await enqueueAndProcessEmail(getSupabaseAdmin(), {
+      organizationId: input.appointment.organizationId,
+      appointmentId: input.appointment.id,
+      customerId: input.appointment.customerId,
+      type: "payment_required",
+      recipient: input.appointment.customer.email,
       subject,
       html: paymentEmailHtml({
         customerName: input.appointment.customer.fullName,
@@ -511,21 +515,6 @@ async function deliverPaymentRequestEmail(input: {
         supportPhone: input.settings.business.supportPhone
       })
     });
-    try {
-      await recordCommunication({
-        appointment: input.appointment,
-        messageType: "payment_required",
-        subject,
-        status: delivery.status,
-        providerMessageId: delivery.providerMessageId,
-        lastError: delivery.error ?? undefined
-      });
-    } catch (error) {
-      console.error("[email] Could not record payment email delivery outcome.", {
-        appointmentId: input.appointment.id,
-        error: error instanceof Error ? error.message : "Unknown error"
-      });
-    }
     return delivery;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Payment email delivery failed.";

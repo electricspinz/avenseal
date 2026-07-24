@@ -5,6 +5,7 @@
 ### Added
 
 - Product and engineering documentation system.
+- A database-backed, Gmail-backed communications queue foundation for booking and payment-status emails.
 
 ### Changed
 
