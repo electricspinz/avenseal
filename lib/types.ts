@@ -169,6 +169,10 @@ export interface CommunicationSettings {
   smsRemindersEnabled: boolean;
   reviewRequestsEnabled: boolean;
   confirmationMessagingEnabled: boolean;
+  reminder24hMinutesBefore: number;
+  reminder2hMinutesBefore: number;
+  followupMinutesAfter: number;
+  reviewRequestMinutesAfter: number;
 }
 
 export interface AiConciergeSettings {
