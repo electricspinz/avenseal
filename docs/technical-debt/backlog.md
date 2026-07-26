@@ -13,3 +13,4 @@
 | TD-009 | Retention and deletion procedures | Privacy | Unclear lifecycle | High | P1 | Open | Platform foundation | Define policy and workflows |
 | TD-010 | Incident response documentation | Operations | Inconsistent response | Medium | P2 | Open | Platform foundation | Create runbooks |
 | TD-011 | Booking concurrency load testing | Availability | Capacity unknown | Medium | P1 | Open | Availability engine | Add realistic contention tests |
+| TD-012 | Reminder scheduler deployment absent | Communications | Due reminders need external invocation | Medium | P1 | Open | Milestone 6 | Configure a protected scheduler |

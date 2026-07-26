@@ -2,6 +2,8 @@
 
 The worker processes queued and due retryable email records independently of booking and payment requests.
 
+Appointment reminders are promoted separately through `POST /api/internal/reminders/process` before this worker delivers them. Schedule reminder promotion before queue delivery. See [appointment reminders](appointment-reminders.md).
+
 ## Configuration
 
 Set `COMMUNICATION_PROCESSOR_SECRET` to a strong server-only secret. Optional controls are `COMMUNICATION_PROCESSOR_BATCH_SIZE` (default `10`) and `COMMUNICATION_PROCESSING_TIMEOUT_MINUTES` (default `10`). Staging also requires `COMMUNICATION_SAFE_RECIPIENTS` before delivery is allowed.
