@@ -276,3 +276,43 @@ export interface CommunicationMessage {
   sentAt: string | null;
   lastError: string | null;
 }
+
+export type AdminCommunicationStatus = "scheduled" | "ready_to_queue" | "queued" | "sent" | "failed" | "cancelled";
+
+export interface AdminCommunication {
+  id: string;
+  source: "message" | "reminder";
+  messageId: string | null;
+  appointmentId: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  messageType: string;
+  recipientEmail: string;
+  subject: string | null;
+  bodyHtml: string | null;
+  status: AdminCommunicationStatus;
+  scheduledFor: string | null;
+  queuedAt: string | null;
+  sentAt: string | null;
+  attemptCount: number;
+  lastAttemptedAt: string | null;
+  lastError: string | null;
+  providerMessageId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminCommunicationPage {
+  records: AdminCommunication[];
+  currentPage: number;
+  totalPages: number;
+  totalRecords: number;
+}
+
+export interface AdminCommunicationMetrics {
+  scheduled: number;
+  readyToQueue: number;
+  queued: number;
+  sent: number;
+  failed: number;
+}

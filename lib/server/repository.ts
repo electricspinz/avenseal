@@ -27,6 +27,9 @@ import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/se
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 import type {
   AiConciergeSettings,
+  AdminCommunication,
+  AdminCommunicationMetrics,
+  AdminCommunicationPage,
   AppointmentPayment,
   AppointmentRequest,
   AppointmentRules,
@@ -262,6 +265,31 @@ function mapCommunication(row: SupabaseRow): CommunicationMessage {
     lastAttemptedAt: stringOrNull(row.last_attempted_at),
     sentAt: stringOrNull(row.sent_at),
     lastError: stringOrNull(row.last_error)
+  };
+}
+
+function mapAdminCommunication(row: SupabaseRow): AdminCommunication {
+  return {
+    id: String(row.id),
+    source: String(row.source) === "reminder" ? "reminder" : "message",
+    messageId: stringOrNull(row.message_id),
+    appointmentId: stringOrNull(row.appointment_id),
+    customerId: stringOrNull(row.customer_id),
+    customerName: stringOrNull(row.customer_name),
+    messageType: String(row.message_type),
+    recipientEmail: String(row.recipient_email),
+    subject: stringOrNull(row.subject),
+    bodyHtml: stringOrNull(row.body_html),
+    status: String(row.status) as AdminCommunication["status"],
+    scheduledFor: stringOrNull(row.scheduled_for),
+    queuedAt: stringOrNull(row.queued_at),
+    sentAt: stringOrNull(row.sent_at),
+    attemptCount: Number(row.attempt_count ?? 0),
+    lastAttemptedAt: stringOrNull(row.last_attempted_at),
+    lastError: stringOrNull(row.last_error),
+    providerMessageId: stringOrNull(row.provider_message_id),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
   };
 }
 
@@ -829,6 +857,70 @@ export const repository = {
       .order("created_at", { ascending: false });
     if (error && error.code !== "PGRST205") throw error;
     return (data ?? []).map(mapCommunication);
+  },
+  async listAdminCommunications(filters: { page?: number; status?: string; type?: string } = {}): Promise<AdminCommunicationPage> {
+    const pageSize = 25;
+    const currentPage = Math.max(filters.page ?? 1, 1);
+    if (!hasSupabaseServiceConfig()) return { records: [], currentPage, totalPages: 1, totalRecords: 0 };
+    const organizationId = await resolvePublicOrganizationId();
+    let query = getSupabaseAdmin()
+      .from("admin_communications")
+      .select("*", { count: "exact" })
+      .eq("organization_id", organizationId);
+    if (filters.status) query = query.eq("status", filters.status);
+    if (filters.type) query = query.eq("message_type", filters.type);
+    const { data, error, count } = await query
+      .order("scheduled_for", { ascending: false, nullsFirst: false })
+      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+    if (error && error.code !== "PGRST205") throw error;
+    const totalRecords = count ?? 0;
+    return {
+      records: (data ?? []).map(mapAdminCommunication),
+      currentPage,
+      totalPages: Math.max(1, Math.ceil(totalRecords / pageSize)),
+      totalRecords
+    };
+  },
+  async getAdminCommunication(id: string): Promise<AdminCommunication | null> {
+    if (!hasSupabaseServiceConfig()) return null;
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("admin_communications")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("id", id)
+      .maybeSingle();
+    if (error && error.code !== "PGRST205") throw error;
+    return data ? mapAdminCommunication(data) : null;
+  },
+  async getCommunicationMetrics(): Promise<AdminCommunicationMetrics> {
+    if (!hasSupabaseServiceConfig()) return { scheduled: 0, readyToQueue: 0, queued: 0, sent: 0, failed: 0 };
+    const organizationId = await resolvePublicOrganizationId();
+    const statuses = ["scheduled", "ready_to_queue", "queued", "sent", "failed"] as const;
+    const counts = await Promise.all(statuses.map(async (status) => {
+      const { count, error } = await getSupabaseAdmin()
+        .from("admin_communications")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("status", status);
+      if (error && error.code !== "PGRST205") throw error;
+      return count ?? 0;
+    }));
+    return { scheduled: counts[0], readyToQueue: counts[1], queued: counts[2], sent: counts[3], failed: counts[4] };
+  },
+  async retryFailedCommunication(id: string, organizationId: string) {
+    if (!hasSupabaseServiceConfig()) throw new Error("Communication retry requires Supabase-backed storage.");
+    const { data, error } = await getSupabaseAdmin()
+      .from("communication_messages")
+      .update({ status: "queued", next_attempt_at: new Date().toISOString(), last_error: null })
+      .eq("id", id)
+      .eq("organization_id", organizationId)
+      .eq("status", "failed")
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error("Only failed communications can be retried.");
+    return data;
   },
   async createPaymentLink(appointmentId: string) {
     const appointment = await repository.getAppointment(appointmentId);
