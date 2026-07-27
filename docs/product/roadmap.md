@@ -14,7 +14,7 @@ Status vocabulary: **Complete**, **Active**, **Proposed**.
 
 | Item | Status | Milestone | Dependencies | Customer value |
 | --- | --- | --- | --- | --- |
-| Communications engine, confirmations, updates, cancellations, and reminders | Active | PR #11 | Provider abstraction, queue | Clear appointment communications |
+| Communications engine, confirmations, updates, cancellations, reminders, and GitHub Actions processing | Active | PR #11 | Provider abstraction, queue | Clear appointment communications |
 | Secure customer portal, rescheduling, and cancellation | Proposed | PR #12 | Secure appointment access | Customer self-service |
 | Configurable intake forms | Proposed | Future | Service configuration | Better appointment preparation |
 

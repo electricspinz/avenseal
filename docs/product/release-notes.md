@@ -7,6 +7,7 @@
 - Product and engineering documentation system.
 - A database-backed, Gmail-backed communications queue foundation for booking and payment-status emails.
 - A protected, scheduler-compatible communications queue worker with bounded batches and stale-claim recovery.
+
 - Appointment reminder scheduling and promotion into the communications queue.
 
 ### Changed
@@ -27,7 +28,7 @@
 
 ### Known limitations
 
-- Communications scheduling and automated Calendar retry processing remain planned work.
+- Automated Calendar retry processing remains planned work. Communications scheduling requires production GitHub and application secrets before activation.
 
 ## Platform milestones to date
 
