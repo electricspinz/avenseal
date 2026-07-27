@@ -1132,11 +1132,10 @@ export const repository = {
     if (match) await sendStatusLink(match, "appointment_request_received");
   },
   async getSettings() {
-    const settings = await loadOrganizationSettings();
-    return settings.business;
+    return loadOrganizationSettings();
   },
   async getOrganizationSettings() {
-    return loadOrganizationSettings();
+    return repository.getSettings();
   },
   async listIntegrations() {
     const env = getServerEnv();
