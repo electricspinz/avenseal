@@ -1,7 +1,7 @@
 import type { AppointmentRequest, OrganizationSettings } from "@/lib/types";
 
 export type AttentionItem = {
-  id: "email-reminders" | "confirmations" | "concierge" | "services" | "availability";
+  id: string;
   title: string;
   description: string;
   href: string;

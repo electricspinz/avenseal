@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 const nav = [
   ["Dashboard", "/admin", icons.monitor],
   ["Appointments", "/admin/appointments", icons.calendar],
+  ["Communications", "/admin/communications", icons.clock],
   ["Customers", "/admin/customers", icons.users],
   ["Settings", "/admin/settings", icons.lock]
 ] as const;
@@ -42,4 +43,3 @@ export function AdminShell({ children, active }: { children: React.ReactNode; ac
 export function AdminCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("rounded-lg border border-silver bg-white p-5 shadow-sm", className)}>{children}</div>;
 }
-
