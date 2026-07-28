@@ -2,13 +2,14 @@ import Link from "next/link";
 import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { AdminCard } from "@/components/admin-shell";
 
-export type HealthStatus = "healthy" | "attention" | "unconfigured" | "unavailable";
+export type HealthStatus = "healthy" | "attention" | "unconfigured" | "unavailable" | "unknown";
 
 const statusCopy: Record<HealthStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   healthy: { label: "Healthy", className: "text-emerald-800", Icon: CheckCircle2 },
   attention: { label: "Needs attention", className: "text-amber-900", Icon: CircleAlert },
   unconfigured: { label: "Not configured", className: "text-slateDeep", Icon: CircleDashed },
-  unavailable: { label: "Status unavailable", className: "text-slateDeep", Icon: CircleDashed }
+  unavailable: { label: "Status unavailable", className: "text-slateDeep", Icon: CircleDashed },
+  unknown: { label: "Unknown", className: "text-slateDeep", Icon: CircleDashed }
 };
 
 export function SystemHealthCard({ name, status, detail, href, linkLabel = "Open settings" }: { name: string; status: HealthStatus; detail: string; href: string; linkLabel?: string }) {
