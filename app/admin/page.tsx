@@ -9,11 +9,13 @@ import { SnapshotMetric } from "@/components/mission-control/snapshot-metric";
 import { loadMissionControlViewModel } from "@/lib/server/mission-control";
 import { loadOperationsFeed } from "@/lib/server/operations-feed";
 import { loadAttentionIssues } from "@/lib/server/attention-engine";
+import { buildRecommendations } from "@/lib/server/recommendation-engine";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
   const [missionControl, operationsFeed, attentionItems] = await Promise.all([loadMissionControlViewModel(), loadOperationsFeed(), loadAttentionIssues()]);
+  const recommendations = buildRecommendations({ missionControl, operationsFeed, attentionIssues: attentionItems });
 
   return (
     <AdminShell active="Dashboard">
@@ -48,7 +50,7 @@ export default async function AdminDashboardPage() {
         <QuickActionFoundation />
       </div>
 
-      <RecommendationsFoundation />
+      <RecommendationsFoundation recommendations={recommendations} />
       <OperationsFeedFoundation feed={operationsFeed} />
     </AdminShell>
   );
