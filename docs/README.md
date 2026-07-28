@@ -8,7 +8,7 @@ It complements—not replaces—feature PRDs, ADRs, migrations, and operational 
 
 | Section | Purpose | Start here |
 | --- | --- | --- |
-| [00 Overview](00-overview/vision.md) | Product strategy: why Avenseal exists, its North Star, and direction | [Vision](00-overview/vision.md) |
+| [00 Overview](00-overview/vision.md) | Product strategy: why Avenseal exists, its North Star, and canonical roadmap sequence | [Vision](00-overview/vision.md) · [Roadmap](00-overview/roadmap.md) |
 | [01 Design System](01-design-system/design-principles.md) | Design principles plus implementation-ready [tokens](01-design-system/design-tokens.md), [components](01-design-system/components.md), and [content style](01-design-system/content-style.md) | [Design Principles](01-design-system/design-principles.md) |
 | [03 Product](03-product/mission-control.md) | PRDs define feature problem/scope; UI specifications define presentation and behavior | [Mission Control PRD](03-product/mission-control.md) · [Mission Control UI Specification](03-product/mission-control-ui.md) |
 | [04 Development](04-development/codex-playbook.md) | Engineering playbook: architecture, validation, and delivery rules | [Codex Playbook](04-development/codex-playbook.md) |
@@ -34,7 +34,8 @@ Every roadmap or capability statement should use one of these labels:
 
 ## Related reference material
 
-- [Existing product roadmap](product/roadmap.md)
+- [Canonical Product Blueprint roadmap](00-overview/roadmap.md)
+- [Historical product roadmap](product/roadmap.md)
 - [Architecture overview](architecture/overview.md)
 - [Current visual system](design-system.md)
 - [Testing strategy](engineering/testing-strategy.md)
