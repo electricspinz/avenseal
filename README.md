@@ -83,7 +83,7 @@ pnpm build
 
 ## Documentation
 
-- [Product vision](docs/product/vision.md), [roadmap](docs/product/roadmap.md), and [milestones](docs/product/milestones.md)
+- [Product Blueprint vision](docs/00-overview/vision.md), [canonical roadmap](docs/00-overview/roadmap.md), and [milestones](docs/product/milestones.md)
 - [Architecture overview](docs/architecture/overview.md) and [architecture decisions](docs/architecture/decisions/README.md)
 - [Development workflow](docs/engineering/development-workflow.md) and [testing strategy](docs/engineering/testing-strategy.md)
 - [Technical debt backlog](docs/technical-debt/backlog.md) and [release notes](docs/product/release-notes.md)
