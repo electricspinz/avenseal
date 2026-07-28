@@ -8,11 +8,12 @@ import { SchedulePanel } from "@/components/mission-control/schedule-panel";
 import { SectionHeader } from "@/components/mission-control/section-header";
 import { SnapshotMetric } from "@/components/mission-control/snapshot-metric";
 import { loadMissionControlViewModel } from "@/lib/server/mission-control";
+import { loadOperationsFeed } from "@/lib/server/operations-feed";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const missionControl = await loadMissionControlViewModel();
+  const [missionControl, operationsFeed] = await Promise.all([loadMissionControlViewModel(), loadOperationsFeed()]);
   const attentionItems = missionControl.settings ? deriveAttentionItems(missionControl.settings) : [];
 
   return (
@@ -49,7 +50,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <RecommendationsFoundation />
-      <OperationsFeedFoundation />
+      <OperationsFeedFoundation feed={operationsFeed} />
     </AdminShell>
   );
 }
