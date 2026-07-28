@@ -87,9 +87,8 @@ export async function loadMissionControlViewModel(
 }
 
 export function appointmentsForDate(appointments: AppointmentRequest[], date: string) {
-  return appointments
-    .filter((appointment) => appointment.preferredDate === date)
-    .toSorted(compareAppointmentsByTime);
+  return [...appointments.filter((appointment) => appointment.preferredDate === date)]
+    .sort(compareAppointmentsByTime);
 }
 
 export function appointmentMetricValues(appointments: AppointmentRequest[], today: string, currentTime: string) {

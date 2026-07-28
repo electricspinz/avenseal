@@ -34,7 +34,7 @@ describe("Mission Control view model", () => {
     }), new Date("2026-11-01T05:30:00.000Z"));
 
     expect(viewModel.dailyBrief.appointmentsToday).toBe(1);
-    expect(viewModel.schedule.appointments?.map((item) => item.id)).toEqual(["today"]);
+    expect(viewModel.schedule.appointments?.map((item: AppointmentRequest) => item.id)).toEqual(["today"]);
   });
 
   it("marks date-derived appointment data unknown for a missing or invalid organization timezone", async () => {
@@ -47,7 +47,7 @@ describe("Mission Control view model", () => {
   });
 
   it("sorts today's appointments chronologically and leaves invalid times last", () => {
-    expect(appointmentsForDate([appointment("late", "2026-07-28", "15:00"), appointment("invalid", "2026-07-28", "noon"), appointment("early", "2026-07-28", "09:00")], "2026-07-28").map((item) => item.id)).toEqual(["early", "late", "invalid"]);
+    expect(appointmentsForDate([appointment("late", "2026-07-28", "15:00"), appointment("invalid", "2026-07-28", "noon"), appointment("early", "2026-07-28", "09:00")], "2026-07-28").map((item: AppointmentRequest) => item.id)).toEqual(["early", "late", "invalid"]);
   });
 
   it("derives upcoming, completed, and awaiting-review counts from appointments", () => {
@@ -87,7 +87,7 @@ describe("Mission Control view model", () => {
       metrics: Promise.reject(new Error("communications unavailable"))
     }), new Date("2026-07-28T14:00:00.000Z"));
 
-    expect(viewModel.schedule.appointments?.map((item) => item.id)).toEqual(["today"]);
+    expect(viewModel.schedule.appointments?.map((item: AppointmentRequest) => item.id)).toEqual(["today"]);
     expect(viewModel.snapshot.find((metric) => metric.label === "Scheduled communications")?.value).toBeNull();
     expect(viewModel.systemHealth[0].status).toBe("unknown");
   });
