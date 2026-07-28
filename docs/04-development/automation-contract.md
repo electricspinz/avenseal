@@ -235,11 +235,19 @@ The canonical state definitions and transitions are in [Automation Lifecycle](..
 
 Safe summaries are required for operator visibility. Detailed provider errors may be retained only within approved server-side audit boundaries and must never include secrets or private payloads.
 
+### Executor safety refinement (Sprint 6B.2)
+
+The executor result contract must distinguish an action that was never attempted from one whose external effect may already have occurred. In addition to `succeeded`, `failed`, and `cancelled`, its implementation-facing result union may use `skipped` for a deterministic gate and `requires_manual_review` for an indeterminate post-side-effect state. Both carry a machine-readable reason code and a safe summary.
+
+If the required pre-execution audit write fails, the executor returns a non-attempted failure and must not invoke the rule. If the rule action returns but its final audit write fails, it returns `requires_manual_review`, not ordinary success; a later process must not blindly re-execute that action. This is a safety refinement of the proposed interface, not evidence of a production automation implementation.
+
 ## 12. Audit contract
 
 Every evaluation that changes lifecycle state and every execution attempt produces an `AutomationAuditRecord`. Audit records must include organization, rule/version, execution, actor, trigger, state transition, timestamp, and safe summary. They must support Mission Control evidence and future automation history without leaking credentials, tokens, government ID material, or unnecessary customer content.
 
 Audit writes are mandatory for outcome transitions. If an action’s auditable outcome cannot be recorded safely, the executor must fail closed or route to manual review according to the approved rule.
+
+The audit sink contract should expose explicit, ordered event types: `evaluation_completed`, `execution_blocked`, `approval_required`, `approval_rejected`, `execution_started`, `execution_succeeded`, `execution_failed`, `execution_skipped`, `manual_review_required`, and `cancelled`. Audit records are tenant-scoped immutable facts; test implementations must return safe copies rather than mutable storage references.
 
 ## 13. Idempotency contract
 
