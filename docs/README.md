@@ -4,13 +4,14 @@ The Product Blueprint is Avenseal’s version-controlled internal handbook. It c
 
 It complements—not replaces—feature PRDs, ADRs, migrations, and operational runbooks. When sources disagree, deployed behavior and the relevant ADR or migration are authoritative; update this blueprint in the same change that intentionally changes product direction or working conventions.
 
-## Reading order
+## Reading order and document types
 
 | Section | Purpose | Start here |
 | --- | --- | --- |
-| [00 Overview](00-overview/vision.md) | Why Avenseal exists, its north star, and product direction | [Vision](00-overview/vision.md) |
-| [01 Design System](01-design-system/design-principles.md) | The practical visual and accessibility standards for product surfaces | [Design principles](01-design-system/design-principles.md) |
-| [04 Development](04-development/codex-playbook.md) | The engineering operating model for safely shipping changes | [Codex playbook](04-development/codex-playbook.md) |
+| [00 Overview](00-overview/vision.md) | Product strategy: why Avenseal exists, its North Star, and direction | [Vision](00-overview/vision.md) |
+| [01 Design System](01-design-system/design-principles.md) | Design principles plus implementation-ready [tokens](01-design-system/design-tokens.md), [components](01-design-system/components.md), and [content style](01-design-system/content-style.md) | [Design Principles](01-design-system/design-principles.md) |
+| [03 Product](03-product/mission-control.md) | PRDs define feature problem/scope; UI specifications define presentation and behavior | [Mission Control PRD](03-product/mission-control.md) · [Mission Control UI Specification](03-product/mission-control-ui.md) |
+| [04 Development](04-development/codex-playbook.md) | Engineering playbook: architecture, validation, and delivery rules | [Codex Playbook](04-development/codex-playbook.md) |
 
 ## Document status language
 

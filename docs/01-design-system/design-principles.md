@@ -1,6 +1,6 @@
 # Design Principles
 
-**Status:** Current design standards. This document operationalizes the existing [Avenseal Design System](../design-system.md) and the product principles in [Vision](../00-overview/vision.md).
+**Status:** Current design standards. This document explains the high-level “why” behind the existing [Avenseal Design System](../design-system.md), [Design Tokens](design-tokens.md), [Component Standards](components.md), [Content Style](content-style.md), and product principles in [Vision](../00-overview/vision.md).
 
 ## Design philosophy and personality
 
@@ -54,4 +54,4 @@ Avenseal should feel calm, precise, and professionally accountable. The interfac
 | Complete state design | Current engineering requirement | Every new page defines loading, empty, and error behavior |
 | Inclusive operation | Current engineering requirement | Primary workflows are keyboard accessible and target WCAG AA contrast |
 
-Apply these standards with the [North Star](../00-overview/north-star.md) and enforce them through the [Codex Playbook](../04-development/codex-playbook.md).
+Apply these standards with the [North Star](../00-overview/north-star.md), use the specialized design-system references for implementation detail, and enforce them through the [Codex Playbook](../04-development/codex-playbook.md).
