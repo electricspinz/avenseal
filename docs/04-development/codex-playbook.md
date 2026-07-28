@@ -1,6 +1,6 @@
 # Codex Playbook
 
-**Status:** Current engineering handbook. It translates the [Vision](../00-overview/vision.md), [North Star](../00-overview/north-star.md), and [Design Principles](../01-design-system/design-principles.md) into delivery rules.
+**Status:** Current engineering handbook. It translates the [Vision](../00-overview/vision.md), [North Star](../00-overview/north-star.md), and [Design Principles](../01-design-system/design-principles.md) into delivery rules. Planned deterministic automation must additionally follow the [Automation Engine Engineering Contract](automation-contract.md).
 
 ## Before writing code
 

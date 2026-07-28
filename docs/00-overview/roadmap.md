@@ -51,7 +51,7 @@ Automation precedes Customer Timeline, Email Designer, Analytics and Reporting, 
 
 | Initiative | Classification | Dependencies | Intended outcome |
 | --- | --- | --- | --- |
-| Automation Engine | Planned next | Trusted repository and service boundaries, deterministic rules, audit model | A deterministic, auditable workflow-execution layer that preserves human control |
+| [Automation Engine](../03-product/automation-engine.md) | Planned next | Trusted repository and service boundaries, deterministic rules, audit model | A deterministic, auditable workflow-execution layer that preserves human control |
 | Automation history and auditability | Planned | Automation Engine | Durable explanation of each attempted workflow and outcome |
 | Human controls | Planned | Automation Engine | Pause, disable, and manual-review controls for consequential workflows |
 | Safe retry and idempotency | Planned | Automation Engine, provider/service boundaries | Retry eligible work without duplicate actions |
