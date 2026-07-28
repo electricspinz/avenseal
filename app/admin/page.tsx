@@ -1,5 +1,4 @@
 import { AdminShell } from "@/components/admin-shell";
-import { deriveAttentionItems } from "@/components/admin-dashboard/dashboard-helpers";
 import { SystemHealthCard } from "@/components/admin-dashboard/system-health-card";
 import { AttentionPanel } from "@/components/mission-control/attention-panel";
 import { DailyBrief } from "@/components/mission-control/daily-brief";
@@ -9,12 +8,12 @@ import { SectionHeader } from "@/components/mission-control/section-header";
 import { SnapshotMetric } from "@/components/mission-control/snapshot-metric";
 import { loadMissionControlViewModel } from "@/lib/server/mission-control";
 import { loadOperationsFeed } from "@/lib/server/operations-feed";
+import { loadAttentionIssues } from "@/lib/server/attention-engine";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  const [missionControl, operationsFeed] = await Promise.all([loadMissionControlViewModel(), loadOperationsFeed()]);
-  const attentionItems = missionControl.settings ? deriveAttentionItems(missionControl.settings) : [];
+  const [missionControl, operationsFeed, attentionItems] = await Promise.all([loadMissionControlViewModel(), loadOperationsFeed(), loadAttentionIssues()]);
 
   return (
     <AdminShell active="Dashboard">
@@ -28,7 +27,7 @@ export default async function AdminDashboardPage() {
       />
 
       <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(20rem,0.9fr)_minmax(0,1.5fr)]">
-        <AttentionPanel items={attentionItems} unavailable={!missionControl.settings} />
+        <AttentionPanel items={attentionItems} />
         <SchedulePanel appointments={missionControl.schedule.appointments} timezone={missionControl.schedule.timezone} />
       </div>
 
