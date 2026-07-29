@@ -255,6 +255,12 @@ Each eligible execution has an `IdempotencyKey` derived from stable product fact
 
 The same key must return the prior safe result or an explicit in-progress/manual-review state; it must never create a duplicate provider action. New keys require a new qualifying event or an approved versioned policy reason.
 
+### Reliability foundation refinement
+
+The executor reserves the key only after authorization, controls, eligibility, and required approval have passed, and before the required execution-start audit event. A duplicate reservation produces a typed skipped result and never invokes the rule. A successful action completes its reservation only after its final audit record is written.
+
+If execution has not begun, a reservation may be released after a safe failure such as a pre-execution audit failure. If an action may have produced side effects, or its final audit or reservation-completion write fails, the reservation remains intact and the executor returns manual review. This foundation deliberately does not schedule retries, enqueue work, or run background workers; later scheduling must consume typed retry classification rather than raw exception text.
+
 ## 14. Retry contract
 
 Retries are opt-in per rule. `RetryPolicy` must set a positive bounded maximum, cooldown, timeout, and manual-review behavior. A retry repeats tenant, authorization, control-state, deadline, and idempotency checks. It cannot bypass a paused/disabled control or transform an ambiguous result into success.

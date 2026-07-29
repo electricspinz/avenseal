@@ -17,6 +17,9 @@ export type AutomationReasonCode =
   | "invalid_rule_result"
   | "audit_unavailable"
   | "final_audit_unavailable"
+  | "duplicate_execution"
+  | "idempotency_unavailable"
+  | "idempotency_completion_failed"
   | `rule:${string}`;
 
 export type AutomationReason = {
@@ -60,16 +63,21 @@ export type AutomationEligibility =
 
 export type AutomationResult<TResultData = unknown> =
   | { readonly kind: "succeeded"; readonly executionId: string; readonly data: TResultData; readonly safeSummary: string }
-  | { readonly kind: "failed"; readonly executionId: string | null; readonly attempted: boolean; readonly reason: AutomationReason; readonly safeSummary: string }
-  | { readonly kind: "skipped"; readonly executionId: string | null; readonly reason: AutomationReason; readonly safeSummary: string }
-  | { readonly kind: "requires_manual_review"; readonly executionId: string | null; readonly attempted: boolean; readonly reason: AutomationReason; readonly safeSummary: string }
+  | { readonly kind: "failed"; readonly executionId: string | null; readonly attempted: boolean; readonly sideEffectsMayHaveOccurred?: boolean; readonly reason: AutomationReason; readonly error?: AutomationError; readonly safeSummary: string }
+  | { readonly kind: "skipped"; readonly executionId: string | null; readonly reason: AutomationReason; readonly error?: AutomationError; readonly safeSummary: string }
+  | { readonly kind: "requires_manual_review"; readonly executionId: string | null; readonly attempted: boolean; readonly reason: AutomationReason; readonly error?: AutomationError; readonly safeSummary: string }
   | { readonly kind: "cancelled"; readonly executionId: string; readonly safeSummary: string };
+
+export type AutomationExecutorResult<TResultData = unknown> = AutomationResult<TResultData> & {
+  readonly retry: AutomationRetryClassification;
+};
 
 export type AutomationRuleMetadata = {
   readonly id: string;
   readonly version: string;
   readonly name: string;
   readonly requiresHumanApproval: boolean;
+  readonly idempotencyDiscriminator?: string;
 };
 
 export type AutomationExecutionRequest<TContext extends AutomationContext = AutomationContext> = {
@@ -128,3 +136,4 @@ export interface AutomationClock {
 export interface AutomationIdGenerator {
   next(): string;
 }
+import type { AutomationError, AutomationRetryClassification } from "@/lib/server/automation/errors";

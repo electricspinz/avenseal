@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DefaultAutomationExecutor } from "@/lib/server/automation/executor";
+import { InMemoryAutomationIdempotencyStore, createAutomationIdempotencyKey } from "@/lib/server/automation/idempotency";
 import { InMemoryAutomationRegistry } from "@/lib/server/automation/registry";
 import { FixedAutomationAuthorizationProvider, FixedAutomationClock, FixedAutomationControlProvider, IncrementingAutomationIdGenerator, InMemoryAutomationAuditSink } from "@/lib/server/automation/testing";
 import type { AutomationControlProvider } from "@/lib/server/automation/controls";
@@ -49,6 +50,7 @@ function setup(options: {
   consumedApprovalIds?: ConstructorParameters<typeof FixedAutomationAuthorizationProvider>[3];
   trustedOrganization?: ConstructorParameters<typeof FixedAutomationAuthorizationProvider>[0];
   audit?: InMemoryAutomationAuditSink;
+  idempotency?: InMemoryAutomationIdempotencyStore;
 } = {}) {
   const audit = options.audit ?? new InMemoryAutomationAuditSink();
   const executor = new DefaultAutomationExecutor({
@@ -57,7 +59,8 @@ function setup(options: {
     authorization: new FixedAutomationAuthorizationProvider(options.trustedOrganization ?? { kind: "trusted", organizationId: "trusted-org" }, options.authorization, options.approval, options.consumedApprovalIds),
     audit,
     clock: new FixedAutomationClock(now),
-    idGenerator: new IncrementingAutomationIdGenerator("execution")
+    idGenerator: new IncrementingAutomationIdGenerator("execution"),
+    idempotency: options.idempotency ?? new InMemoryAutomationIdempotencyStore()
   });
   return { executor, audit };
 }
@@ -70,6 +73,18 @@ describe("Automation executor", () => {
     await expect(executor.execute(request())).resolves.toMatchObject({ kind: "succeeded", executionId: "execution-1" });
     expect(fixture.calls()).toEqual({ evaluateCalls: 1, executeCalls: 1 });
     expect(audit.all().map((item) => item.event)).toEqual(["evaluation_completed", "execution_started", "execution_succeeded"]);
+  });
+
+  it("reserves before execution, completes successful work, and never executes a duplicate", async () => {
+    const fixture = fakeRule();
+    const idempotency = new InMemoryAutomationIdempotencyStore();
+    const { executor } = setup({ rule: fixture.rule, idempotency });
+    const key = createAutomationIdempotencyKey({ organizationId: "trusted-org", ruleId: "test-rule", ruleVersion: "1", logicalExecutionId: "logical-1" });
+
+    await expect(executor.execute(request())).resolves.toMatchObject({ kind: "succeeded", retry: "non_retryable" });
+    await expect(idempotency.lookup(key, now)).resolves.toMatchObject({ kind: "completed" });
+    await expect(executor.execute(request())).resolves.toMatchObject({ kind: "skipped", reason: { code: "duplicate_execution" }, retry: "duplicate" });
+    expect(fixture.calls()).toEqual({ evaluateCalls: 2, executeCalls: 1 });
   });
 
   it.each([
@@ -173,21 +188,27 @@ describe("Automation executor", () => {
   it("does not invoke an action when required pre-execution audit persistence fails", async () => {
     const fixture = fakeRule();
     const audit = new InMemoryAutomationAuditSink();
+    const idempotency = new InMemoryAutomationIdempotencyStore();
     audit.failAppendAt(2);
-    const result = await setup({ rule: fixture.rule, audit }).executor.execute(request());
+    const result = await setup({ rule: fixture.rule, audit, idempotency }).executor.execute(request());
+    const key = createAutomationIdempotencyKey({ organizationId: "trusted-org", ruleId: "test-rule", ruleVersion: "1", logicalExecutionId: "logical-1" });
 
     expect(result).toMatchObject({ kind: "failed", attempted: false, reason: { code: "audit_unavailable" } });
     expect(fixture.calls()).toEqual({ evaluateCalls: 1, executeCalls: 0 });
+    await expect(idempotency.lookup(key, now)).resolves.toEqual({ kind: "missing" });
   });
 
   it("returns manual review, rather than ordinary success, when final audit persistence fails", async () => {
     const fixture = fakeRule();
     const audit = new InMemoryAutomationAuditSink();
+    const idempotency = new InMemoryAutomationIdempotencyStore();
     audit.failAppendAt(3);
-    const result = await setup({ rule: fixture.rule, audit }).executor.execute(request());
+    const result = await setup({ rule: fixture.rule, audit, idempotency }).executor.execute(request());
+    const key = createAutomationIdempotencyKey({ organizationId: "trusted-org", ruleId: "test-rule", ruleVersion: "1", logicalExecutionId: "logical-1" });
 
     expect(result).toMatchObject({ kind: "requires_manual_review", attempted: true, reason: { code: "final_audit_unavailable" } });
     expect(fixture.calls()).toEqual({ evaluateCalls: 1, executeCalls: 1 });
+    await expect(idempotency.lookup(key, now)).resolves.toMatchObject({ kind: "reserved" });
   });
 
   it("returns manual review when a final failure audit cannot be persisted", async () => {

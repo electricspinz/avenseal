@@ -1,6 +1,9 @@
 import type { AutomationAuditSink } from "@/lib/server/automation/audit";
 import type { AutomationAuthorizationProvider } from "@/lib/server/automation/authorization";
 import type { AutomationControlProvider } from "@/lib/server/automation/controls";
+import { automationError, type AutomationError, type AutomationErrorCategory, type AutomationErrorCode } from "@/lib/server/automation/errors";
+import { createAutomationIdempotencyKey, type AutomationIdempotencyStore } from "@/lib/server/automation/idempotency";
+import { classifyAutomationRetry } from "@/lib/server/automation/retry";
 import type {
   AutomationAuditEvent,
   AutomationAuditRecord,
@@ -8,6 +11,7 @@ import type {
   AutomationControlState,
   AutomationEligibility,
   AutomationExecutionRequest,
+  AutomationExecutorResult,
   AutomationIdGenerator,
   AutomationReason,
   AutomationResult,
@@ -22,28 +26,30 @@ export type AutomationExecutorDependencies = {
   readonly audit: AutomationAuditSink;
   readonly clock: AutomationClock;
   readonly idGenerator: AutomationIdGenerator;
+  readonly idempotency: AutomationIdempotencyStore;
+  readonly idempotencyReservationTtlMilliseconds?: number;
 };
 
 export interface AutomationExecutor {
-  execute(request: AutomationExecutionRequest): Promise<AutomationResult>;
+  execute(request: AutomationExecutionRequest): Promise<AutomationExecutorResult>;
 }
 
 export class DefaultAutomationExecutor implements AutomationExecutor {
   constructor(private readonly dependencies: AutomationExecutorDependencies) {}
 
-  async execute(request: AutomationExecutionRequest): Promise<AutomationResult> {
+  async execute(request: AutomationExecutionRequest): Promise<AutomationExecutorResult> {
     const requestError = validateRequest(request);
-    if (requestError) return failed(null, false, requestError);
+    if (requestError) return finalResult(failed(null, false, requestError));
 
     const trustedOrganization = await this.dependencies.authorization.resolveTrustedOrganization({
       actor: request.actor,
       logicalExecutionId: request.context.logicalExecutionId
     });
     if (trustedOrganization.kind !== "trusted") {
-      return failed(null, false, reason("unauthorized_actor", "The organization context could not be verified."));
+      return finalResult(failed(null, false, reason("unauthorized_actor", "The organization context could not be verified.")));
     }
     if (trustedOrganization.organizationId !== request.context.organizationId) {
-      return failed(null, false, reason("tenant_mismatch", "The request does not match the trusted organization context."));
+      return finalResult(failed(null, false, reason("tenant_mismatch", "The request does not match the trusted organization context.")));
     }
 
     const rule = this.dependencies.registry.get(request.ruleId);
@@ -75,7 +81,7 @@ export class DefaultAutomationExecutor implements AutomationExecutor {
 
     const evaluationRecorded = await this.record(this.auditRecord(request, trustedOrganization.organizationId, rule.metadata, "evaluation_completed", null, eligibility.reasons, eligibility.kind === "eligible" ? "Automation rule evaluation completed." : "Automation rule evaluation did not permit execution."));
     if (!evaluationRecorded) {
-      return failed(null, false, reason("audit_unavailable", "Automation evaluation could not be recorded safely."));
+      return finalResult(failed(null, false, reason("audit_unavailable", "Automation evaluation could not be recorded safely.")));
     }
 
     if (eligibility.kind !== "eligible" && eligibility.kind !== "requires_approval") {
@@ -99,11 +105,39 @@ export class DefaultAutomationExecutor implements AutomationExecutor {
       }
     }
 
+    const reservationNow = this.dependencies.clock.now();
+    const idempotencyKey = createAutomationIdempotencyKey({
+      organizationId: trustedOrganization.organizationId,
+      ruleId: rule.metadata.id,
+      ruleVersion: rule.metadata.version,
+      logicalExecutionId: request.context.logicalExecutionId,
+      policyDiscriminator: rule.metadata.idempotencyDiscriminator
+    });
+    try {
+      const reservation = await this.dependencies.idempotency.reserve({
+        key: idempotencyKey,
+        organizationId: trustedOrganization.organizationId,
+        ruleId: rule.metadata.id,
+        ruleVersion: rule.metadata.version,
+        logicalExecutionId: request.context.logicalExecutionId,
+        now: reservationNow,
+        expiresAt: new Date(reservationNow.getTime() + (this.dependencies.idempotencyReservationTtlMilliseconds ?? 5 * 60 * 1000))
+      });
+      if (reservation.kind === "duplicate") {
+        return this.blocked(request, trustedOrganization.organizationId, rule.metadata, "execution_blocked", reason("duplicate_execution", "An execution for this logical event already exists."));
+      }
+      if (reservation.kind === "expired") {
+        return finalResult(failed(null, false, reason("idempotency_unavailable", "The automation action could not safely renew its expired duplicate guard.")));
+      }
+    } catch {
+      return finalResult(failed(null, false, reason("idempotency_unavailable", "The automation action could not reserve its duplicate guard.")));
+    }
+
     const executionId = this.dependencies.idGenerator.next();
-    // Sprint 6B.3 inserts authoritative idempotency reservation at this point, after approval and before execution-start audit.
     const started = await this.record(this.auditRecord(request, trustedOrganization.organizationId, rule.metadata, "execution_started", executionId, [], "Automation execution started."));
     if (!started) {
-      return failed(executionId, false, reason("audit_unavailable", "Automation execution could not be recorded before the action began."));
+      await this.releaseReservation(idempotencyKey);
+      return finalResult(failed(executionId, false, reason("audit_unavailable", "Automation execution could not be recorded before the action began.")));
     }
 
     let result: AutomationResult;
@@ -111,24 +145,30 @@ export class DefaultAutomationExecutor implements AutomationExecutor {
       const ruleResult = await rule.execute({ executionId, organizationId: trustedOrganization.organizationId, context: request.context, actor: request.actor });
       result = normalizeRuleResult(ruleResult, executionId);
     } catch {
-      result = failed(executionId, true, reason("execution_failed", "The automation action did not complete."));
+      result = failed(executionId, true, reason("execution_failed", "The automation action did not complete."), true);
     }
 
     const finalEvent = eventForResult(result);
     const finalRecorded = await this.record(this.auditRecord(request, trustedOrganization.organizationId, rule.metadata, finalEvent, executionId, resultReasons(result), result.safeSummary));
     if (!finalRecorded) {
-      return {
+      return finalResult({
         kind: "requires_manual_review",
         executionId,
         attempted: true,
         reason: reason("final_audit_unavailable", "The automation action may have completed, but its final audit record could not be stored."),
         safeSummary: "Manual review is required because the final automation outcome could not be recorded."
-      };
+      });
     }
-    return result;
+    if (result.kind === "succeeded") {
+      const completed = await this.completeReservation(idempotencyKey);
+      if (!completed) return finalResult(manualReview(executionId, "idempotency_completion_failed", "The automation action completed, but its duplicate guard could not be finalized."));
+    } else if (canReleaseReservation(result)) {
+      await this.releaseReservation(idempotencyKey);
+    }
+    return finalResult(result);
   }
 
-  private async blockedWithoutRule(request: AutomationExecutionRequest, organizationId: string, blockedReason: AutomationReason): Promise<AutomationResult> {
+  private async blockedWithoutRule(request: AutomationExecutionRequest, organizationId: string, blockedReason: AutomationReason): Promise<AutomationExecutorResult> {
     const recorded = await this.record({
       event: "execution_blocked",
       organizationId,
@@ -141,13 +181,13 @@ export class DefaultAutomationExecutor implements AutomationExecutor {
       reasons: [blockedReason],
       safeSummary: blockedReason.explanation
     });
-    return recorded ? skipped(null, blockedReason) : failed(null, false, reason("audit_unavailable", "The blocked automation outcome could not be recorded safely."));
+    return finalResult(recorded ? skipped(null, blockedReason) : failed(null, false, reason("audit_unavailable", "The blocked automation outcome could not be recorded safely.")));
   }
 
-  private async blocked(request: AutomationExecutionRequest, organizationId: string, metadata: AutomationRuleMetadata, event: AutomationAuditEvent, blockedReason: AutomationReason, resultKind: "skipped" | "failed" = "skipped"): Promise<AutomationResult> {
+  private async blocked(request: AutomationExecutionRequest, organizationId: string, metadata: AutomationRuleMetadata, event: AutomationAuditEvent, blockedReason: AutomationReason, resultKind: "skipped" | "failed" = "skipped"): Promise<AutomationExecutorResult> {
     const recorded = await this.record(this.auditRecord(request, organizationId, metadata, event, null, [blockedReason], blockedReason.explanation));
-    if (!recorded) return failed(null, false, reason("audit_unavailable", "The automation outcome could not be recorded safely."));
-    return resultKind === "failed" ? failed(null, false, blockedReason) : skipped(null, blockedReason);
+    if (!recorded) return finalResult(failed(null, false, reason("audit_unavailable", "The automation outcome could not be recorded safely.")));
+    return finalResult(resultKind === "failed" ? failed(null, false, blockedReason) : skipped(null, blockedReason));
   }
 
   private auditRecord(request: AutomationExecutionRequest, organizationId: string, metadata: AutomationRuleMetadata, event: AutomationAuditEvent, executionId: string | null, reasons: readonly AutomationReason[], safeSummary: string): AutomationAuditRecord {
@@ -157,6 +197,24 @@ export class DefaultAutomationExecutor implements AutomationExecutor {
   private async record(record: AutomationAuditRecord) {
     try {
       await this.dependencies.audit.append(record);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async completeReservation(key: string) {
+    try {
+      await this.dependencies.idempotency.complete(key, this.dependencies.clock.now());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async releaseReservation(key: string) {
+    try {
+      await this.dependencies.idempotency.release(key);
       return true;
     } catch {
       return false;
@@ -209,10 +267,53 @@ function reason(code: AutomationReason["code"], explanation: string): Automation
   return { code, explanation };
 }
 
-function failed(executionId: string | null, attempted: boolean, failureReason: AutomationReason): AutomationResult {
-  return { kind: "failed", executionId, attempted, reason: failureReason, safeSummary: failureReason.explanation };
+function failed(executionId: string | null, attempted: boolean, failureReason: AutomationReason, sideEffectsMayHaveOccurred = false): AutomationResult {
+  return {
+    kind: "failed",
+    executionId,
+    attempted,
+    sideEffectsMayHaveOccurred,
+    reason: failureReason,
+    error: executorError(failureReason),
+    safeSummary: failureReason.explanation
+  };
 }
 
 function skipped(executionId: string | null, skipReason: AutomationReason): AutomationResult {
-  return { kind: "skipped", executionId, reason: skipReason, safeSummary: skipReason.explanation };
+  return { kind: "skipped", executionId, reason: skipReason, error: executorError(skipReason), safeSummary: skipReason.explanation };
+}
+
+function manualReview(executionId: string, code: AutomationReason["code"], safeSummary: string): AutomationResult {
+  const reviewReason = reason(code, safeSummary);
+  return { kind: "requires_manual_review", executionId, attempted: true, reason: reviewReason, error: executorError(reviewReason), safeSummary };
+}
+
+function finalResult(result: AutomationResult): AutomationExecutorResult {
+  return { ...result, retry: classifyAutomationRetry(result).classification };
+}
+
+function canReleaseReservation(result: AutomationResult) {
+  if (result.kind === "cancelled" || result.kind === "skipped") return true;
+  return result.kind === "failed" && result.sideEffectsMayHaveOccurred === false;
+}
+
+function executorError(failureReason: AutomationReason): AutomationError {
+  const details = errorDetails(failureReason.code);
+  return automationError(details.category, failureReason.code as AutomationErrorCode, failureReason.explanation, details.retryClassification);
+}
+
+function errorDetails(code: AutomationReason["code"]): { category: AutomationErrorCategory; retryClassification: AutomationError["retryClassification"] } {
+  if (code === "unauthorized_actor") return { category: "authorization", retryClassification: "non_retryable" };
+  if (code === "approval_required" || code === "approval_rejected") return { category: "approval", retryClassification: "manual_review" };
+  if (code === "invalid_request" || code === "invalid_context") return { category: "validation", retryClassification: "non_retryable" };
+  if (code === "tenant_mismatch") return { category: "tenant", retryClassification: "non_retryable" };
+  if (code === "audit_unavailable" || code === "final_audit_unavailable") return { category: "audit", retryClassification: "manual_review" };
+  if (code === "paused" || code === "disabled") return { category: "control", retryClassification: "non_retryable" };
+  if (code === "unsupported") return { category: "configuration", retryClassification: "unsupported" };
+  if (code === "duplicate_execution") return { category: "duplicate", retryClassification: "duplicate" };
+  if (code === "idempotency_unavailable" || code === "idempotency_completion_failed") return { category: "idempotency", retryClassification: "manual_review" };
+  if (code === "unknown_rule") return { category: "configuration", retryClassification: "unsupported" };
+  if (code === "evaluation_failed" || code === "execution_failed") return { category: "rule", retryClassification: "manual_review" };
+  if (code === "ineligible" || code === "invalid_rule_result") return { category: "validation", retryClassification: "non_retryable" };
+  return { category: "unexpected", retryClassification: "manual_review" };
 }
