@@ -2,7 +2,7 @@
 
 **Status:** Planned product behavior with a provider-neutral rule-contract foundation. These rules describe normalized actions; they do not send communications, schedule work, or write to the database.
 
-**Related:** [Automation Engine PRD](automation-engine.md) · [Automation Rule Catalog](automation-rules.md) · [Automation Engineering Contract](../04-development/automation-contract.md) · [Mission Control PRD](mission-control.md)
+**Related:** [Automation Engine PRD](automation-engine.md) · [Automation Rule Catalog](automation-rules.md) · [Communications Execution Engine](communications-execution.md) · [Automation Engineering Contract](../04-development/automation-contract.md) · [Mission Control PRD](mission-control.md)
 
 ## Event contracts
 
