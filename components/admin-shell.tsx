@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { icons } from "@/components/icons";

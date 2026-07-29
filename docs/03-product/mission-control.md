@@ -1,6 +1,6 @@
 # Mission Control PRD
 
-**Status:** Planned product requirements. This document does not claim that the complete Mission Control experience is implemented.
+**Status:** First read-only dashboard foundation is implemented. Unsupported read models remain explicitly unavailable.
 
 **Related:** [Vision](../00-overview/vision.md) · [North Star](../00-overview/north-star.md) · [Roadmap](../00-overview/roadmap.md) · [Design Principles](../01-design-system/design-principles.md) · [Codex Playbook](../04-development/codex-playbook.md) · [Architecture Overview](../architecture/overview.md)
 
@@ -28,6 +28,14 @@ Make Mission Control the default admin homepage so a notary can immediately:
 - understand today’s appointment workload;
 - distinguish verified normal configuration from attention requiring action; and
 - navigate to the underlying record in one interaction when possible.
+
+## Current dashboard foundation
+
+The dashboard composes existing server-side read models for appointments, attention issues, communications metrics, system health, and the Operations Feed. It does not access persistence from components, execute an automation, send a communication, or change an appointment.
+
+Today’s appointments, attention, business snapshot, system health, quick navigation, and recent operations use verified existing models. The Communications widget exposes available normalized counts. Automation execution audit records and organization-wide Customer Timeline reads do not currently have repository query boundaries, so their widgets show an explicit unavailable state instead of a fabricated zero or activity item.
+
+The dashboard is multi-column on wide screens, two-column where room allows, and single-column on smaller screens. Each card remains keyboard reachable through its underlying links; loading and error states use named `status` and `alert` landmarks.
 
 ## 4. North Star alignment
 
