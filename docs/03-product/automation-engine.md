@@ -2,7 +2,7 @@
 
 **Status:** Planned. This document defines the intended product behavior and safety boundaries for deterministic automation. It does not describe an implemented feature, API, database design, or scripting environment.
 
-**Related:** [Roadmap](../00-overview/roadmap.md) · [Mission Control PRD](mission-control.md) · [Automation Rule Catalog](automation-rules.md) · [Automation Lifecycle](automation-lifecycle.md) · [Automation Engineering Contract](../04-development/automation-contract.md) · [Design Principles](../01-design-system/design-principles.md) · [Codex Playbook](../04-development/codex-playbook.md)
+**Related:** [Roadmap](../00-overview/roadmap.md) · [Mission Control PRD](mission-control.md) · [Automation Rule Catalog](automation-rules.md) · [Automation Lifecycle](automation-lifecycle.md) · [Appointment Automation Rules](appointment-automation.md) · [Automation Engineering Contract](../04-development/automation-contract.md) · [Design Principles](../01-design-system/design-principles.md) · [Codex Playbook](../04-development/codex-playbook.md)
 
 ## Executive summary
 
