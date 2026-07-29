@@ -46,8 +46,10 @@ function RecommendationRow({ recommendation }: { recommendation: Recommendation 
 
 export function QuickActionFoundation() {
   const actions = [
+    { href: "/admin/customers", label: "Open customers", Icon: CalendarDays, primary: false },
     { href: "/admin/appointments", label: "Review appointments", Icon: CalendarDays, primary: true },
     { href: "/admin/communications", label: "Open communications", Icon: MessageSquareMore, primary: false },
+    { href: "#operations-feed-heading", label: "View operations feed", Icon: Waypoints, primary: false },
     { href: "/admin/settings", label: "Open settings", Icon: Settings2, primary: false },
     { href: "/admin/settings/integrations", label: "Open integrations", Icon: Waypoints, primary: false }
   ];
