@@ -5,10 +5,12 @@ import { PaymentLinkButton } from "@/components/payment-link-button";
 import { StatusBadge } from "@/components/status-badge";
 import { repository } from "@/lib/server/repository";
 import { formatDate, formatTime } from "@/lib/utils";
+import { parseTimelineFilters, queryAppointmentTimeline } from "@/lib/server/timeline-query";
+import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
 
 export const dynamic = "force-dynamic";
 
-export default async function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AppointmentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ category?: string; outcome?: string; appointmentId?: string }> }) {
   const { id } = await params;
   const appointment = await repository.getAppointment(id);
   if (!appointment) notFound();
@@ -17,6 +19,8 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
   const payments = await repository.listPayments(id);
   const calendarEvents = await repository.listCalendarEvents(id);
   const communications = await repository.listCommunications(id);
+  const filters = parseTimelineFilters(await searchParams);
+  const timeline = await queryAppointmentTimeline({ organizationId: appointment.organizationId, appointmentId: appointment.id, category: filters.category, outcome: filters.outcome });
 
   return (
     <AdminShell active="Appointments">
@@ -74,6 +78,10 @@ export default async function AppointmentDetailPage({ params }: { params: Promis
               ))}
               {history.length === 0 && <p>No history yet.</p>}
             </div>
+          </AdminCard>
+          <AdminCard>
+            <TimelineFiltersForm filters={filters} />
+            <CustomerTimeline events={timeline} title="Appointment Timeline" />
           </AdminCard>
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Internal Notes</h2>

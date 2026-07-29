@@ -1,14 +1,19 @@
 import { notFound } from "next/navigation";
 import { AdminCard, AdminShell } from "@/components/admin-shell";
 import { repository } from "@/lib/server/repository";
+import { parseTimelineFilters, queryCustomerTimeline } from "@/lib/server/timeline-query";
+import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CustomerDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ category?: string; outcome?: string; appointmentId?: string }> }) {
   const { id } = await params;
   const customer = await repository.getCustomer(id);
   if (!customer) notFound();
   const appointments = (await repository.listAppointments()).filter((appointment) => appointment.customerId === id);
+  const filters = parseTimelineFilters(await searchParams);
+  const appointmentId = appointments.some((appointment) => appointment.id === filters.appointmentId) ? filters.appointmentId : undefined;
+  const timeline = await queryCustomerTimeline({ organizationId: customer.organizationId, customerId: customer.id, ...filters, appointmentId });
   return (
     <AdminShell active="Customers">
       <h1 className="text-3xl font-semibold text-navy">{customer.fullName}</h1>
@@ -26,6 +31,10 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           </div>
         </AdminCard>
       </div>
+      <AdminCard className="mt-6">
+        <TimelineFiltersForm filters={{ ...filters, appointmentId }} appointments={appointments.map((appointment) => ({ id: appointment.id, label: appointment.id }))} />
+        <CustomerTimeline events={timeline} />
+      </AdminCard>
     </AdminShell>
   );
 }
