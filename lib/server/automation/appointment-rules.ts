@@ -47,6 +47,8 @@ export type QueueCommunicationAction = {
   readonly appointmentId: string;
   readonly customerId: string;
   readonly purpose: AppointmentCommunicationPurpose;
+  readonly sourceRuleId?: string;
+  readonly sourceRuleVersion?: string;
   readonly sourceEventId: string;
   readonly recipientEmail: string;
   readonly scheduling: { readonly kind: "immediate" } | { readonly kind: "delayed"; readonly notBefore: string };
@@ -108,7 +110,7 @@ abstract class AppointmentRule<TEvent extends AppointmentLifecycleEvent> impleme
       const failure = eligibility.reasons[0] ?? reason("invalid_context", "The appointment event is not eligible for this action.");
       return { kind: "failed", executionId: request.executionId, attempted: false, sideEffectsMayHaveOccurred: false, reason: failure, safeSummary: failure.explanation };
     }
-    return { kind: "succeeded", executionId: request.executionId, data: { actions: this.actions(event as TEvent) }, safeSummary: "Appointment automation actions were described." };
+    return { kind: "succeeded", executionId: request.executionId, data: { actions: this.actions(event as TEvent).map((action) => action.type === "queue_communication" ? { ...action, sourceRuleId: this.metadata.id, sourceRuleVersion: this.metadata.version } : action) }, safeSummary: "Appointment automation actions were described." };
   }
 
   protected abstract eligibility(event: TEvent): AutomationEligibility;
