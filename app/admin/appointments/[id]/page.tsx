@@ -8,7 +8,6 @@ import { formatDate, formatTime } from "@/lib/utils";
 import { parseTimelineFilters, queryAppointmentTimeline } from "@/lib/server/timeline-query";
 import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
 import { ExternalSessionCard } from "@/components/external-session-card";
-import { getExternalSession } from "@/lib/server/external-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +22,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
   const communications = await repository.listCommunications(id);
   const filters = parseTimelineFilters(await searchParams);
   const timeline = await queryAppointmentTimeline({ organizationId: appointment.organizationId, appointmentId: appointment.id, category: filters.category, outcome: filters.outcome });
-  const externalSession = getExternalSession(appointment.organizationId, appointment.id);
+  const externalSession = await repository.getExternalSession(appointment.organizationId, appointment.id);
 
   return (
     <AdminShell active="Appointments">

@@ -9,10 +9,10 @@ const status: CustomerAppointmentStatus = { appointmentId: "appointment-1", orga
 
 describe("Client Portal foundation", () => {
   it("projects only safe trusted appointment data through the secure query boundary", async () => {
-    const portal = await queryClientPortal("valid-token", { async getAppointmentByAccessToken(token) { return token === "valid-token" ? status : null; } });
+    const portal = await queryClientPortal("valid-token", { async getAppointmentByAccessToken(token) { return token === "valid-token" ? status : null; }, async getExternalSession() { return null; } });
     expect(portal?.appointment.reference).toBe("AVEN-1234");
     expect(JSON.stringify(portal)).not.toContain("provider.example");
-    await expect(queryClientPortal("other-token", { async getAppointmentByAccessToken() { return null; } })).resolves.toBeNull();
+    await expect(queryClientPortal("other-token", { async getAppointmentByAccessToken() { return null; }, async getExternalSession() { return null; } })).resolves.toBeNull();
   });
 
   it("uses payment before preparation and distinguishes unavailable domains", () => {
