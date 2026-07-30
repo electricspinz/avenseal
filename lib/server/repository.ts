@@ -22,6 +22,7 @@ import {
 import { devStore } from "@/lib/server/dev-store";
 import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/communications";
 import { cancelAppointmentReminders, scheduleAppointmentReminders } from "@/lib/server/appointment-reminders";
+import { clientWorkspaceExpiration, normalizeClientWorkspaceEmail } from "@/lib/server/client-workspace-magic-links";
 import type { ExternalSession, ExternalSessionInput, ExternalSessionStatus } from "@/lib/server/external-sessions";
 import type { ClientWorkspaceAccessToken } from "@/lib/server/client-workspace-access";
 import type { EmailDeliveryResult } from "@/lib/server/email";
@@ -442,7 +443,8 @@ async function createAppointmentAccessLink(appointment: AppointmentRequest, reas
   const organizationId = appointment.organizationId;
   const token = generateAppointmentAccessToken();
   const tokenHash = hashAppointmentAccessToken(token);
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14);
+  const expiresAt = new Date(clientWorkspaceExpiration(appointment));
+  await getSupabaseAdmin().from("appointment_access_tokens").update({ revoked_at: new Date().toISOString() }).eq("organization_id", organizationId).eq("appointment_request_id", appointment.id).eq("purpose", "client_workspace").is("revoked_at", null);
   const { error } = await getSupabaseAdmin()
     .from("appointment_access_tokens")
     .insert({
@@ -476,8 +478,8 @@ async function sendStatusLink(appointment: AppointmentRequest, messageType: "app
     subject,
     html: renderEmailTemplate({
       greetingName: appointment.customer.fullName,
-      body: "Your Avenseal appointment request has been received. You can securely check its status using the link below.",
-      actionLabel: "Check Appointment Status",
+      body: "View your appointment details and prepare for your online notarization. Avenseal helps customers schedule, prepare, and pay; the notarization itself is conducted through an independent remote online notarization provider.",
+      actionLabel: "View My Appointment",
       actionUrl: access.url,
       footer: `Questions? Contact ${settings.business.supportEmail}${settings.business.supportPhone ? ` or ${settings.business.supportPhone}` : ""}.`
     })
@@ -704,6 +706,51 @@ export const repository = {
     const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").update({ revoked_at: now.toISOString() }).eq("id", tokenIdentifier).eq("organization_id", organizationId).is("revoked_at", null).select("id").maybeSingle();
     if (error) throw error;
     return Boolean(data);
+  },
+  async revokeClientWorkspaceTokensForAppointment(organizationId: string, appointmentId: string, now = new Date()) {
+    if (!hasSupabaseServiceConfig()) {
+      let revoked = 0;
+      for (const record of developmentClientWorkspaceTokens.values()) if (record.organizationId === organizationId && record.appointmentId === appointmentId && !record.revokedAt) { developmentClientWorkspaceTokens.set(record.identifier, { ...record, revokedAt: now.toISOString() }); revoked++; }
+      return revoked;
+    }
+    const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").update({ revoked_at: now.toISOString() }).eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).eq("purpose", "client_workspace").is("revoked_at", null).select("id");
+    if (error) throw error;
+    return data.length;
+  },
+  async getClientWorkspaceAccessMetadata(organizationId: string, appointmentId: string) {
+    if (!hasSupabaseServiceConfig()) return [...developmentClientWorkspaceTokens.values()].filter((item) => item.organizationId === organizationId && item.appointmentId === appointmentId).sort((a, b) => b.issuedAt.localeCompare(a.issuedAt))[0] ?? null;
+    const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").select("id,organization_id,appointment_request_id,expires_at,issued_at,revoked_at,last_used_at,purpose,created_by").eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).eq("purpose", "client_workspace").order("issued_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data ? mapClientWorkspaceToken(data) : null;
+  },
+  async rotateClientWorkspaceToken(appointment: AppointmentRequest, reason: string, createdBy?: string | null) {
+    await repository.revokeClientWorkspaceTokensForAppointment(appointment.organizationId, appointment.id);
+    const issued = await repository.issueClientWorkspaceToken({ organizationId: appointment.organizationId, appointmentId: appointment.id, expiresAt: clientWorkspaceExpiration(appointment), createdBy });
+    if (hasSupabaseServiceConfig()) await getSupabaseAdmin().from("audit_logs").insert({ organization_id: appointment.organizationId, action: "client_workspace.access_rotated", entity_type: "appointment_request", entity_id: appointment.id, metadata: { tokenId: issued.record.identifier, reason, expiresAt: issued.record.expiresAt } });
+    return issued;
+  },
+  async sendClientWorkspaceAccess(appointment: AppointmentRequest, reason: string, createdBy?: string | null) {
+    const access = await repository.rotateClientWorkspaceToken(appointment, reason, createdBy);
+    const settings = await loadOrganizationSettings();
+    let delivery: EmailDeliveryResult;
+    try {
+      delivery = await enqueueAndProcessEmail(getSupabaseAdmin(), { organizationId: appointment.organizationId, appointmentId: appointment.id, customerId: appointment.customerId, type: "booking_confirmation", recipient: appointment.customer.email, subject: "Your new Avenseal appointment link", html: renderEmailTemplate({ greetingName: appointment.customer.fullName, body: "Your previous appointment links are no longer active. View your appointment and prepare for your online notarization.", actionLabel: "View My Appointment", actionUrl: `${getServerEnv().NEXT_PUBLIC_SITE_URL}/appointments/access/${encodeURIComponent(access.token)}`, footer: `Questions? Contact ${settings.business.supportEmail}.` }) });
+    } catch {
+      delivery = { status: "failed", providerMessageId: null, error: "Email delivery could not be completed." };
+    }
+    await getSupabaseAdmin().from("audit_logs").insert({ organization_id: appointment.organizationId, action: delivery.status === "sent" ? "client_workspace.email_sent" : "client_workspace.email_failed", entity_type: "appointment_request", entity_id: appointment.id, metadata: { tokenId: access.record.identifier, reason, delivery: delivery.status } });
+    return { record: access.record, delivery };
+  },
+  async requestClientWorkspaceLink(email: string) {
+    if (!hasSupabaseServiceConfig()) return;
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin().from("appointment_requests").select("*, customers!inner(*)").eq("organization_id", organizationId).ilike("customers.email", normalizeClientWorkspaceEmail(email)).in("status", ["awaiting_review", "awaiting_payment", "approved_pending_payment", "confirmed", "ready"]).order("preferred_date", { ascending: true }).order("preferred_time", { ascending: true }).limit(1);
+    if (error) throw error;
+    const match = data?.[0] ? mapAppointment(data[0]) : null;
+    if (!match) return;
+    const access = await repository.rotateClientWorkspaceToken(match, "customer_request");
+    const settings = await loadOrganizationSettings();
+    await enqueueAndProcessEmail(getSupabaseAdmin(), { organizationId, appointmentId: match.id, customerId: match.customerId, type: "booking_confirmation", recipient: match.customer.email, subject: "Your new Avenseal appointment link", html: renderEmailTemplate({ greetingName: match.customer.fullName, body: "Your previous appointment links are no longer active.", actionLabel: "View My Appointment", actionUrl: `${getServerEnv().NEXT_PUBLIC_SITE_URL}/appointments/access/${encodeURIComponent(access.token)}`, footer: `Questions? Contact ${settings.business.supportEmail}.` }) });
   },
   async updateAppointment(id: string, update: { status?: AppointmentStatus; serviceId?: string; preferredDate?: string; preferredTime?: string; note?: string }) {
     if (!hasSupabaseServiceConfig()) {
@@ -1222,6 +1269,8 @@ export const repository = {
     if (tokenError) throw tokenError;
     const tokenRecord = tokens?.[0];
     if (!tokenRecord || !appointmentAccessTokenHashesEqual(tokenHash, tokenRecord.token_hash)) return null;
+
+    await supabase.from("audit_logs").insert({ organization_id: tokenRecord.organization_id, action: "client_workspace.access_opened", entity_type: "appointment_request", entity_id: tokenRecord.appointment_request_id, metadata: { tokenId: tokenRecord.id, actorType: "customer" } });
 
     await supabase
       .from("appointment_access_tokens")
