@@ -1,6 +1,6 @@
 import type { CustomerAppointmentStatus, PaymentStatus } from "@/lib/types";
 import { repository } from "@/lib/server/repository";
-import { getExternalSession, type ExternalSession } from "@/lib/server/external-sessions";
+import type { ExternalSession } from "@/lib/server/external-sessions";
 
 export type PortalAvailability = "available" | "unavailable";
 export type PortalItemState = "complete" | "current" | "pending" | "unavailable";
@@ -17,16 +17,16 @@ export type ClientPortalViewModel = Readonly<{
   nextStep: Readonly<{ title: string; detail: string }>;
 }>;
 
-export type ClientPortalDependencies = Readonly<{ getAppointmentByAccessToken: (token: string) => Promise<CustomerAppointmentStatus | null> }>;
-const dependencies: ClientPortalDependencies = { getAppointmentByAccessToken: (token) => repository.getCustomerAppointmentByAccessToken(token) };
+export type ClientPortalDependencies = Readonly<{ getAppointmentByAccessToken: (token: string) => Promise<CustomerAppointmentStatus | null>; getExternalSession: (organizationId: string, appointmentId: string) => Promise<ExternalSession | null> }>;
+const dependencies: ClientPortalDependencies = { getAppointmentByAccessToken: (token) => repository.getCustomerAppointmentByAccessToken(token), getExternalSession: (organizationId, appointmentId) => repository.getExternalSession(organizationId, appointmentId) };
 
 /** Secure, read-only portal boundary. The access token is verified by the existing repository boundary. */
 export async function queryClientPortal(token: string, dataSource: ClientPortalDependencies = dependencies): Promise<ClientPortalViewModel | null> {
   const status = await dataSource.getAppointmentByAccessToken(token);
-  return status ? projectPortal(status) : null;
+  return status ? projectPortal(status, await dataSource.getExternalSession(status.organizationId, status.appointmentId)) : null;
 }
 
-export function projectPortal(status: CustomerAppointmentStatus, externalSession = getExternalSession(status.organizationId, status.appointmentId)): ClientPortalViewModel {
+export function projectPortal(status: CustomerAppointmentStatus, externalSession: ExternalSession | null = null): ClientPortalViewModel {
   const paymentAvailable = status.paymentStatus !== null;
   const paid = status.paymentStatus === "paid";
   const completed = status.status === "completed";
