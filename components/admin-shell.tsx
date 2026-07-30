@@ -10,6 +10,7 @@ const nav = [
   ["Communications", "/admin/communications", icons.clock],
   ["Payments", "/admin/payments", icons.clock],
   ["Documents", "/admin/documents", icons.clock],
+  ["Workflows", "/admin/workflows", icons.clock],
   ["Customers", "/admin/customers", icons.users],
   ["Settings", "/admin/settings", icons.lock]
 ] as const;
