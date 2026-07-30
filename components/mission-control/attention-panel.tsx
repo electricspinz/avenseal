@@ -7,7 +7,7 @@ import type { AttentionIssue } from "@/lib/server/attention-engine";
 
 const priorityLabel = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
 
-export function AttentionPanel({ items }: { items: AttentionIssue[] }) {
+export function AttentionPanel({ items }: { items: readonly AttentionIssue[] }) {
   return (
     <AdminCard>
       <SectionHeader id="attention-heading" title="Attention required" />

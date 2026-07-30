@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { normalizeTime, weekdays } from "@/lib/availability";
 import { getServerEnv } from "@/lib/env";
 import { renderEmailSubject } from "@/lib/milestone3/email";
@@ -22,6 +22,8 @@ import {
 import { devStore } from "@/lib/server/dev-store";
 import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/communications";
 import { cancelAppointmentReminders, scheduleAppointmentReminders } from "@/lib/server/appointment-reminders";
+import type { ExternalSession, ExternalSessionInput, ExternalSessionStatus } from "@/lib/server/external-sessions";
+import type { ClientWorkspaceAccessToken } from "@/lib/server/client-workspace-access";
 import type { EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
@@ -380,6 +382,13 @@ async function loadOrganizationSettings(): Promise<OrganizationSettings> {
 export function hashAppointmentAccessToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
+function appointmentAccessTokenHashesEqual(left: string, right: string) { const leftBytes = Buffer.from(left, "hex"); const rightBytes = Buffer.from(right, "hex"); return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes); }
+
+const developmentExternalSessions = new Map<string, ExternalSession>();
+const developmentClientWorkspaceTokens = new Map<string, ClientWorkspaceAccessToken & { tokenHash: string }>();
+function externalSessionKey(organizationId: string, appointmentId: string) { return `${organizationId}:${appointmentId}`; }
+function mapExternalSession(row: { organization_id: string; appointment_request_id: string; provider: string; session_name: string; launch_url: string | null; reference_number: string | null; status: string; notes: string | null; created_at: string; updated_at: string; metadata: Record<string, string | number | boolean | null> | null }): ExternalSession { return { organizationId: row.organization_id, appointmentId: row.appointment_request_id, provider: row.provider, sessionName: row.session_name, launchUrl: row.launch_url, referenceNumber: row.reference_number, status: row.status as ExternalSessionStatus, notes: row.notes, createdAt: row.created_at, updatedAt: row.updated_at, metadata: row.metadata ?? {} }; }
+function mapClientWorkspaceToken(row: { id: string; organization_id: string; appointment_request_id: string; expires_at: string; issued_at: string; revoked_at: string | null; last_used_at: string | null; purpose: string; created_by: string | null }): ClientWorkspaceAccessToken { return { identifier: row.id, organizationId: row.organization_id, appointmentId: row.appointment_request_id, expiresAt: row.expires_at, issuedAt: row.issued_at, revokedAt: row.revoked_at, lastAccessedAt: row.last_used_at, purpose: "client_workspace", createdBy: row.created_by }; }
 
 function generateAppointmentAccessToken() {
   return randomBytes(32).toString("base64url");
@@ -440,6 +449,7 @@ async function createAppointmentAccessLink(appointment: AppointmentRequest, reas
       organization_id: organizationId,
       appointment_request_id: appointment.id,
       token_hash: tokenHash,
+      purpose: "client_workspace",
       expires_at: expiresAt.toISOString()
     });
   if (error?.code === "PGRST205") return null;
@@ -635,6 +645,65 @@ export const repository = {
       .single();
     if (error) return null;
     return mapAppointment(data);
+  },
+  async getExternalSession(organizationId: string, appointmentId: string): Promise<ExternalSession | null> {
+    if (!hasSupabaseServiceConfig()) return developmentExternalSessions.get(externalSessionKey(organizationId, appointmentId)) ?? null;
+    const { data, error } = await getSupabaseAdmin().from("external_sessions").select("*").eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).maybeSingle();
+    if (error?.code === "PGRST205") return null;
+    if (error) throw error;
+    return data ? mapExternalSession(data) : null;
+  },
+  async saveExternalSession(organizationId: string, appointmentId: string, input: ExternalSessionInput): Promise<ExternalSession> {
+    if (!hasSupabaseServiceConfig()) {
+      const existing = developmentExternalSessions.get(externalSessionKey(organizationId, appointmentId));
+      const timestamp = new Date().toISOString();
+      const session: ExternalSession = { organizationId, appointmentId, provider: input.provider, sessionName: input.sessionName, launchUrl: input.launchUrl ?? null, referenceNumber: input.referenceNumber ?? null, status: input.status, notes: input.notes ?? null, createdAt: existing?.createdAt ?? timestamp, updatedAt: timestamp, metadata: {} };
+      developmentExternalSessions.set(externalSessionKey(organizationId, appointmentId), session);
+      return session;
+    }
+    const { data, error } = await getSupabaseAdmin().from("external_sessions").upsert({ organization_id: organizationId, appointment_request_id: appointmentId, provider: input.provider, session_name: input.sessionName, launch_url: input.launchUrl ?? null, reference_number: input.referenceNumber ?? null, status: input.status, notes: input.notes ?? null, metadata: {}, updated_at: new Date().toISOString() }, { onConflict: "organization_id,appointment_request_id" }).select().single();
+    if (error) throw error;
+    return mapExternalSession(data);
+  },
+  async removeExternalSession(organizationId: string, appointmentId: string) {
+    if (!hasSupabaseServiceConfig()) return developmentExternalSessions.delete(externalSessionKey(organizationId, appointmentId));
+    const { error } = await getSupabaseAdmin().from("external_sessions").delete().eq("organization_id", organizationId).eq("appointment_request_id", appointmentId);
+    if (error) throw error;
+    return true;
+  },
+  async issueClientWorkspaceToken(input: { organizationId: string; appointmentId: string; expiresAt: string; createdBy?: string | null }) {
+    const token = generateAppointmentAccessToken();
+    const tokenHash = hashAppointmentAccessToken(token);
+    const issuedAt = new Date().toISOString();
+    if (!hasSupabaseServiceConfig()) {
+      const record: ClientWorkspaceAccessToken & { tokenHash: string } = { identifier: randomUUID(), organizationId: input.organizationId, appointmentId: input.appointmentId, expiresAt: input.expiresAt, issuedAt, revokedAt: null, lastAccessedAt: null, purpose: "client_workspace", createdBy: input.createdBy ?? null, tokenHash };
+      developmentClientWorkspaceTokens.set(record.identifier, record);
+      return { token, record: mapClientWorkspaceToken({ id: record.identifier, organization_id: record.organizationId, appointment_request_id: record.appointmentId, expires_at: record.expiresAt, issued_at: record.issuedAt, revoked_at: null, last_used_at: null, purpose: record.purpose, created_by: record.createdBy }) };
+    }
+    const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").insert({ organization_id: input.organizationId, appointment_request_id: input.appointmentId, token_hash: tokenHash, expires_at: input.expiresAt, issued_at: issuedAt, purpose: "client_workspace", created_by: input.createdBy ?? null }).select("id,organization_id,appointment_request_id,expires_at,issued_at,revoked_at,last_used_at,purpose,created_by").single();
+    if (error) throw error;
+    return { token, record: mapClientWorkspaceToken(data) };
+  },
+  async validateClientWorkspaceToken(token: string, now = new Date()): Promise<ClientWorkspaceAccessToken | null> {
+    const tokenHash = hashAppointmentAccessToken(token);
+    if (!hasSupabaseServiceConfig()) {
+      const record = [...developmentClientWorkspaceTokens.values()].find((item) => appointmentAccessTokenHashesEqual(tokenHash, item.tokenHash) && !item.revokedAt && Date.parse(item.expiresAt) > now.getTime()) ?? null;
+      if (!record) return null;
+      const updated = { ...record, lastAccessedAt: now.toISOString() };
+      developmentClientWorkspaceTokens.set(updated.identifier, updated);
+      return mapClientWorkspaceToken({ id: updated.identifier, organization_id: updated.organizationId, appointment_request_id: updated.appointmentId, expires_at: updated.expiresAt, issued_at: updated.issuedAt, revoked_at: updated.revokedAt, last_used_at: updated.lastAccessedAt, purpose: updated.purpose, created_by: updated.createdBy });
+    }
+    const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").select("id,organization_id,appointment_request_id,token_hash,expires_at,issued_at,revoked_at,last_used_at,purpose,created_by").eq("token_hash", tokenHash).is("revoked_at", null).gt("expires_at", now.toISOString()).maybeSingle();
+    if (error) throw error;
+    if (!data || !appointmentAccessTokenHashesEqual(tokenHash, data.token_hash)) return null;
+    await getSupabaseAdmin().from("appointment_access_tokens").update({ last_used_at: now.toISOString() }).eq("id", data.id).eq("organization_id", data.organization_id);
+    return mapClientWorkspaceToken({ ...data, last_used_at: now.toISOString() });
+  },
+  async revokeClientWorkspaceToken(organizationId: string, tokenIdentifier: string, now = new Date()) {
+    if (!hasSupabaseServiceConfig()) { const record = developmentClientWorkspaceTokens.get(tokenIdentifier); if (!record || record.organizationId !== organizationId) return false; developmentClientWorkspaceTokens.set(tokenIdentifier, { ...record, revokedAt: now.toISOString() }); return true; }
+    const { data, error } = await getSupabaseAdmin().from("appointment_access_tokens").update({ revoked_at: now.toISOString() }).eq("id", tokenIdentifier).eq("organization_id", organizationId).is("revoked_at", null).select("id").maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
   },
   async updateAppointment(id: string, update: { status?: AppointmentStatus; serviceId?: string; preferredDate?: string; preferredTime?: string; note?: string }) {
     if (!hasSupabaseServiceConfig()) {
@@ -1152,7 +1221,7 @@ export const repository = {
     if (tokenError?.code === "PGRST205") return null;
     if (tokenError) throw tokenError;
     const tokenRecord = tokens?.[0];
-    if (!tokenRecord) return null;
+    if (!tokenRecord || !appointmentAccessTokenHashesEqual(tokenHash, tokenRecord.token_hash)) return null;
 
     await supabase
       .from("appointment_access_tokens")
@@ -1186,6 +1255,8 @@ export const repository = {
       .limit(1);
     if (calendarError && calendarError.code !== "PGRST205") throw calendarError;
     return {
+      appointmentId: appointment.id,
+      organizationId: appointment.organizationId,
       reference: referenceCode(appointment.id),
       customerName: appointment.customer.fullName,
       customerEmail: appointment.customer.email,

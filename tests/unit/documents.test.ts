@@ -1,0 +1,4 @@
+import { describe, expect, it } from "vitest";
+import { documentIdentity, timelineFromDocument, type DocumentRecord } from "@/lib/server/documents";
+const document: DocumentRecord = { id: "document", organizationId: "org", customerId: "customer", customerName: "Jordan", appointmentId: "appointment", displayName: "ID", documentType: "identification", status: "uploaded", description: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", uploadedAt: "2026-01-01T00:00:00Z", completedAt: null, archivedAt: null, source: "appointment", correlationId: null, metadata: {} };
+describe("Documents foundation", () => { it("has deterministic tenant identity and safe timeline mapping", () => { expect(documentIdentity(document)).not.toBe(documentIdentity({ ...document, organizationId: "other" })); expect(timelineFromDocument(document)).toMatchObject({ category: "document", type: "document_uploaded", outcome: "informational" }); }); });
