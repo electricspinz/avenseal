@@ -1186,6 +1186,8 @@ export const repository = {
       .limit(1);
     if (calendarError && calendarError.code !== "PGRST205") throw calendarError;
     return {
+      appointmentId: appointment.id,
+      organizationId: appointment.organizationId,
       reference: referenceCode(appointment.id),
       customerName: appointment.customer.fullName,
       customerEmail: appointment.customer.email,

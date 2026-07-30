@@ -226,6 +226,9 @@ export interface AppointmentPayment {
 }
 
 export interface CustomerAppointmentStatus {
+  /** Server-only context; never render or serialize these fields to the customer. */
+  appointmentId: string;
+  organizationId: string;
   reference: string;
   customerName: string;
   customerEmail: string;

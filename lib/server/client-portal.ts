@@ -1,5 +1,6 @@
 import type { CustomerAppointmentStatus, PaymentStatus } from "@/lib/types";
 import { repository } from "@/lib/server/repository";
+import { getExternalSession, type ExternalSession } from "@/lib/server/external-sessions";
 
 export type PortalAvailability = "available" | "unavailable";
 export type PortalItemState = "complete" | "current" | "pending" | "unavailable";
@@ -11,6 +12,7 @@ export type ClientPortalViewModel = Readonly<{
   documents: Readonly<{ availability: PortalAvailability; items: readonly Readonly<{ name: string; status: string }> []; reason?: string }>;
   payment: Readonly<{ availability: PortalAvailability; status: PaymentStatus | null; label: string; reason?: string }>;
   communications: Readonly<{ availability: PortalAvailability; items: readonly Readonly<{ title: string; occurredAt: string | null }> []; reason?: string }>;
+  externalSession: Readonly<{ availability: PortalAvailability; provider: string | null; sessionName: string | null; launchUrl: string | null; status: string | null }>;
   checklist: readonly Readonly<{ id: string; label: string; state: PortalItemState; detail: string }> [];
   nextStep: Readonly<{ title: string; detail: string }>;
 }>;
@@ -24,7 +26,7 @@ export async function queryClientPortal(token: string, dataSource: ClientPortalD
   return status ? projectPortal(status) : null;
 }
 
-export function projectPortal(status: CustomerAppointmentStatus): ClientPortalViewModel {
+export function projectPortal(status: CustomerAppointmentStatus, externalSession = getExternalSession(status.organizationId, status.appointmentId)): ClientPortalViewModel {
   const paymentAvailable = status.paymentStatus !== null;
   const paid = status.paymentStatus === "paid";
   const completed = status.status === "completed";
@@ -43,10 +45,13 @@ export function projectPortal(status: CustomerAppointmentStatus): ClientPortalVi
     documents: { availability: "unavailable", items: [], reason: "The current secure appointment link does not yet expose document records." },
     payment: paymentAvailable ? { availability: "available", status: status.paymentStatus, label: paymentLabel(status.paymentStatus) } : { availability: "unavailable", status: null, label: "Unavailable", reason: "No payment record is available for this appointment." },
     communications: { availability: "unavailable", items: [], reason: "Communication history is not available through the current secure appointment link." },
+    externalSession: projectExternalSession(externalSession),
     checklist,
     nextStep: nextStep({ completed, paymentPending, paymentAvailable })
   };
 }
+
+function projectExternalSession(session: ExternalSession | null) { return session ? { availability: "available" as const, provider: session.provider, sessionName: session.sessionName, launchUrl: session.launchUrl, status: session.status } : { availability: "unavailable" as const, provider: null, sessionName: null, launchUrl: null, status: null }; }
 
 function nextStep(input: { completed: boolean; paymentPending: boolean; paymentAvailable: boolean }) {
   if (input.completed) return { title: "Appointment completed", detail: "Your appointment journey is recorded as completed." };
