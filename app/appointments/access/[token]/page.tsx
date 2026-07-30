@@ -1,13 +1,13 @@
 import { ButtonLink } from "@/components/button";
-import { CustomerAppointmentPortal } from "@/components/customer-appointment-portal";
+import { ClientPortalHome } from "@/components/client-portal/client-portal-home";
 import { PublicShell } from "@/components/public-shell";
-import { repository } from "@/lib/server/repository";
+import { queryClientPortal } from "@/lib/server/client-portal";
 
 export default async function AppointmentAccessPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const status = await repository.getCustomerAppointmentByAccessToken(token);
+  const portal = await queryClientPortal(token);
 
-  if (!status) {
+  if (!portal) {
     return (
       <PublicShell>
         <section className="mx-auto max-w-3xl px-5 py-20 text-center lg:px-8">
@@ -23,16 +23,9 @@ export default async function AppointmentAccessPage({ params }: { params: Promis
     );
   }
 
-  const canPay = Boolean(status.checkoutUrl && status.paymentStatus === "payment_link_created");
-  const safeStatus = { ...status, checkoutUrl: null };
-
   return (
     <PublicShell>
-      <CustomerAppointmentPortal
-        status={safeStatus}
-        paymentHref={`/api/appointments/access/${encodeURIComponent(token)}/payment`}
-        canPay={canPay}
-      />
+      <ClientPortalHome portal={portal} />
     </PublicShell>
   );
 }
