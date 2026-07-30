@@ -38,4 +38,4 @@ The foundation normalizes future provider failures into configuration, authentic
 4. Expose a safe status/configuration projection through the registry.
 5. Add tenant-isolation, capability, error, and adapter tests before enabling the provider.
 
-**Future vision:** BlueNotary and Stripe adapters, OAuth, encrypted secret storage, configuration UI, health verification, and provider-specific audit persistence can use this boundary. They are not implemented here. No provider is registered in application runtime, no API call is made, and no existing Google Calendar, Stripe, Workflow, Client Portal, or Mission Control behavior changes.
+**Future vision:** the [BlueNotary adapter](bluenotary-provider.md), Stripe adapters, OAuth, encrypted secret storage, configuration UI, health verification, and provider-specific audit persistence can use this boundary. No provider is registered in application runtime, no API call is made, and no existing Google Calendar, Stripe, Workflow, Client Portal, or Mission Control behavior changes.

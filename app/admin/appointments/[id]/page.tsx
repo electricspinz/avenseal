@@ -7,6 +7,8 @@ import { repository } from "@/lib/server/repository";
 import { formatDate, formatTime } from "@/lib/utils";
 import { parseTimelineFilters, queryAppointmentTimeline } from "@/lib/server/timeline-query";
 import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
+import { ExternalSessionCard } from "@/components/external-session-card";
+import { getExternalSession } from "@/lib/server/external-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
   const communications = await repository.listCommunications(id);
   const filters = parseTimelineFilters(await searchParams);
   const timeline = await queryAppointmentTimeline({ organizationId: appointment.organizationId, appointmentId: appointment.id, category: filters.category, outcome: filters.outcome });
+  const externalSession = getExternalSession(appointment.organizationId, appointment.id);
 
   return (
     <AdminShell active="Appointments">
@@ -136,6 +139,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               {communications.length === 0 && <p>No messages recorded yet.</p>}
             </div>
           </AdminCard>
+          <ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />
         </div>
         <AdminCard>
           <h2 className="text-xl font-semibold text-navy">Status Management</h2>
