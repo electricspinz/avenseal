@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 
 export function Brand({ dark = false, admin = false }: { dark?: boolean; admin?: boolean }) {
