@@ -1,23 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminCard, AdminShell } from "@/components/admin-shell";
-import { communicationTypeLabel, CommunicationStatusBadge, formatCommunicationTime } from "@/components/admin-communications";
+import { AdminShell } from "@/components/admin-shell";
+import { CommunicationDetail } from "@/components/communications-center";
+import { CustomerTimeline } from "@/components/customer-timeline";
+import { communicationTypeLabel } from "@/components/admin-communications";
+import { getCommunicationsCenterItem } from "@/lib/server/communications-center";
 import { repository } from "@/lib/server/repository";
+import { queryAppointmentTimeline } from "@/lib/server/timeline-query";
 
 export const dynamic = "force-dynamic";
 
 export default async function CommunicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [communication, settings] = await Promise.all([repository.getAdminCommunication(id), repository.getSettings()]);
-  if (!communication) notFound();
-  const timezone = settings.business.timezone;
-  const canRetry = communication.status === "failed" && Boolean(communication.messageId);
-  return <AdminShell active="Communications">
-    <Link href="/admin/communications" className="focus-ring text-sm font-semibold text-emeraldAction underline underline-offset-4">Back to communications</Link>
-    <div className="mt-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><h1 className="text-3xl font-semibold text-navy">{communicationTypeLabel(communication.messageType)}</h1><p className="mt-2 text-sm text-slateDeep">Communication record {communication.id}</p></div><CommunicationStatusBadge status={communication.status} /></div>
-    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]"><div className="space-y-6"><AdminCard><h2 className="text-xl font-semibold text-navy">Message details</h2><dl className="mt-5 space-y-3 text-sm"><Row label="Recipient" value={communication.recipientEmail} /><Row label="Customer" value={communication.customerName ?? "Not recorded"} /><Row label="Related appointment" value={communication.appointmentId ? <Link href={`/admin/appointments/${communication.appointmentId}`} className="focus-ring text-emeraldAction underline underline-offset-4">Open appointment</Link> : "Not linked"} /><Row label="Subject" value={communication.subject ?? "Not recorded"} /><Row label="Source" value={communication.source === "reminder" ? "Scheduled appointment reminder" : "Communications queue"} /></dl></AdminCard><AdminCard><h2 className="text-xl font-semibold text-navy">Rendered content</h2><p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slateDeep">{plainText(communication.bodyHtml) ?? "Rendered message content was not recorded."}</p></AdminCard></div><div className="space-y-6"><AdminCard><h2 className="text-xl font-semibold text-navy">Delivery timeline</h2><dl className="mt-5 space-y-3 text-sm"><Row label="Scheduled" value={formatCommunicationTime(communication.scheduledFor, timezone)} /><Row label="Queued / created" value={formatCommunicationTime(communication.queuedAt, timezone)} /><Row label="Sent" value={formatCommunicationTime(communication.sentAt, timezone)} /><Row label="Last attempt" value={formatCommunicationTime(communication.lastAttemptedAt, timezone)} /><Row label="Created" value={formatCommunicationTime(communication.createdAt, timezone)} /><Row label="Updated" value={formatCommunicationTime(communication.updatedAt, timezone)} /></dl></AdminCard><AdminCard><h2 className="text-xl font-semibold text-navy">Delivery diagnostics</h2><dl className="mt-5 space-y-3 text-sm"><Row label="Attempts" value={String(communication.attemptCount)} /><Row label="Failure reason" value={communication.lastError ?? "None recorded"} /><Row label="Provider message ID" value={communication.providerMessageId ?? "Not recorded"} /></dl>{canRetry ? <form className="mt-5" action={`/api/admin/communications/${communication.messageId}/retry`} method="post"><button className="focus-ring inline-flex min-h-11 items-center justify-center rounded-md bg-emeraldAction px-4 text-sm font-semibold text-white shadow-sm hover:bg-[#239c62]" type="submit">Queue retry</button><p className="mt-2 text-xs leading-5 text-slateDeep">This requeues the failed record; it does not create a duplicate message.</p></form> : <p className="mt-5 rounded-md bg-mist p-3 text-xs leading-5 text-slateDeep">Retry unavailable. Only failed queue records can be safely requeued; scheduled reminder records have not entered the queue yet.</p>}</AdminCard></div></div>
-  </AdminShell>;
-}
+  const [record, settings] = await Promise.all([getCommunicationsCenterItem(id), repository.getSettings()]);
+  if (!record) notFound();
+  const appointment = record.appointmentId ? await repository.getAppointment(record.appointmentId) : null;
+  const timeline = appointment ? await queryAppointmentTimeline({ organizationId: appointment.organizationId, appointmentId: appointment.id }) : [];
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) { return <div className="grid gap-1 border-b border-silver/70 pb-3 sm:grid-cols-[130px_1fr]"><dt className="font-semibold text-slateDeep">{label}</dt><dd className="break-words font-medium text-navy">{value}</dd></div>; }
-function plainText(html: string | null) { return html?.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim() || null; }
+  return <AdminShell active="Communications"><Link href="/admin/communications" className="focus-ring text-sm font-semibold text-emeraldAction underline underline-offset-4">Back to Communications Center</Link><header className="mt-5"><h1 className="text-3xl font-semibold text-navy">{communicationTypeLabel(record.purpose)}</h1><p className="mt-2 text-sm text-slateDeep">Communication record {record.id}</p></header><CommunicationDetail record={record} timezone={settings.business.timezone} timeline={<CustomerTimeline events={timeline} title="Related timeline" />} /></AdminShell>;
+}

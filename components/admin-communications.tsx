@@ -1,3 +1,4 @@
+import React from "react";
 import { cn } from "@/lib/utils";
 import type { AdminCommunicationStatus } from "@/lib/types";
 
@@ -19,7 +20,7 @@ const statusLabels: Record<AdminCommunicationStatus, string> = {
   scheduled: "Scheduled",
   ready_to_queue: "Ready to queue",
   queued: "Queued",
-  sent: "Sent",
+  sent: "Delivered",
   failed: "Failed",
   cancelled: "Cancelled"
 };
