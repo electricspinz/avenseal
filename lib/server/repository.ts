@@ -23,7 +23,7 @@ import { devStore } from "@/lib/server/dev-store";
 import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/communications";
 import { cancelAppointmentReminders, scheduleAppointmentReminders } from "@/lib/server/appointment-reminders";
 import { clientWorkspaceExpiration, normalizeClientWorkspaceEmail } from "@/lib/server/client-workspace-magic-links";
-import type { ExternalSession, ExternalSessionInput, ExternalSessionStatus } from "@/lib/server/external-sessions";
+import { isCustomerVisibleExternalSession, type ExternalSession, type ExternalSessionInput, type ExternalSessionStatus } from "@/lib/server/external-sessions";
 import type { ClientWorkspaceAccessToken } from "@/lib/server/client-workspace-access";
 import type { EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
@@ -691,6 +691,19 @@ export const repository = {
     const audit = getSupabaseAdmin();
     await audit.from("audit_logs").insert({ organization_id: organizationId, action: existing ? "external_session.updated" : "external_session.created", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider: saved.provider, previousStatus: existing?.status ?? null, status: saved.status, actorType: "staff", hasLaunchUrl: Boolean(saved.launchUrl) } });
     if (visible !== previousVisible) await audit.from("audit_logs").insert({ organization_id: organizationId, action: visible ? "external_session.customer_visible" : "external_session.customer_hidden", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider: saved.provider, previousStatus: existing?.status ?? null, status: saved.status, actorType: "staff", previousVisible, visible, hasLaunchUrl: Boolean(saved.launchUrl) } });
+    if (visible && !previousVisible) {
+      const { data: row } = await audit.from("appointment_requests").select("*, customers(*)").eq("organization_id", organizationId).eq("id", appointmentId).maybeSingle();
+      if (row) {
+        const appointment = mapAppointment(row);
+        const { data: payment } = await audit.from("appointment_payments").select("status").eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (isCustomerVisibleExternalSession({ paymentStatus: payment?.status ?? null, appointmentStatus: appointment.status, organizationId, appointmentId, session: saved }) && appointment.customer.email) {
+          const access = await createAppointmentAccessLink(appointment, "external_session_available");
+          // `updated_at` is the persisted result of this hidden→visible mutation. The trigger
+          // boundary prevents visible→visible edits from using it to enqueue another message.
+          if (access) await enqueueAndProcessEmail(audit, { organizationId, appointmentId, customerId: appointment.customerId, type: "external_session_available", recipient: appointment.customer.email, subject: renderEmailSubject("external_session_available", (await loadOrganizationSettings()).business.businessName), html: renderEmailTemplate({ greetingName: appointment.customer.fullName, body: "Your online notarization session is ready. Avenseal coordinates scheduling, payment, preparation, and Client Workspace access. BlueNotary performs identity verification and the live online notarization.", actionLabel: "Open Your Appointment", actionUrl: access.url, footer: "Open your appointment through Avenseal to continue securely." }), idempotencyDiscriminator: saved.updatedAt });
+        }
+      }
+    }
     return saved;
   },
   async removeExternalSession(organizationId: string, appointmentId: string) {

@@ -31,6 +31,22 @@ describe("Communications Center", () => {
     expect(screen.getByText("No communications have been sent yet.")).toBeTruthy();
   });
 
+  it("labels external-session availability without exposing URLs", () => {
+    render(<CommunicationList records={[{ id: "external", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "queued", provider: null, occurredAt: record.createdAt, safeSummary: "Communication is queued.", source: "message", messageId: record.messageId }]} timezone="America/New_York" />);
+    expect(screen.getAllByText("External Session Available").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("appointments/access/");
+    expect(document.body.textContent).not.toContain("bluenotary");
+  });
+
+  it("renders a terminally suppressed handoff as cancelled without sensitive delivery context", () => {
+    render(<CommunicationList records={[{ id: "suppressed", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "cancelled", provider: null, occurredAt: record.createdAt, safeSummary: "Communication was cancelled.", source: "message", messageId: record.messageId }]} timezone="America/New_York" />);
+    expect(screen.getAllByText("Cancelled").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Communication was cancelled.").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("appointments/access/");
+    expect(document.body.textContent).not.toContain("bluenotary");
+    expect(document.body.textContent).not.toContain("reference_number");
+  });
+
   it("renders the route-level loading and safe error states", () => {
     const { rerender } = render(<CommunicationsLoadingState />);
     expect(screen.getByRole("status", { name: "Loading Communications Center" })).toBeTruthy();

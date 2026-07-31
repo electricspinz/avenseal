@@ -3,6 +3,7 @@ export type EmailTemplateType =
   | "clarification_requested"
   | "payment_required"
   | "payment_confirmed"
+  | "external_session_available"
   | "payment_expiring_soon"
   | "payment_window_expired"
   | "appointment_rescheduled"
@@ -18,6 +19,7 @@ export function renderEmailSubject(type: EmailTemplateType, businessName = "Aven
     clarification_requested: `${businessName}: clarification requested`,
     payment_required: `${businessName}: payment required to confirm your appointment`,
     payment_confirmed: `${businessName}: appointment confirmed`,
+    external_session_available: "Your BlueNotary session is ready",
     payment_expiring_soon: `${businessName}: payment link expiring soon`,
     payment_window_expired: `${businessName}: payment window expired`,
     appointment_rescheduled: `${businessName}: appointment updated`,
