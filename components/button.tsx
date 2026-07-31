@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ComponentProps } from "react";
+import React, { type ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
 const variants = {
@@ -42,4 +42,3 @@ export function Button({
     />
   );
 }
-

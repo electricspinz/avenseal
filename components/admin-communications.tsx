@@ -14,6 +14,8 @@ export const communicationTypeLabels: Record<string, string> = {
   payment_required: "Payment required",
   payment_confirmed: "Payment confirmed",
   external_session_available: "External Session Available",
+  document_replacement_requested: "Document Replacement Requested",
+  documents_approved: "Documents Approved",
   appointment_updated: "Appointment updated"
 };
 

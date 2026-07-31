@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
 import { isCustomerVisibleExternalSession, type ExternalSession } from "@/lib/server/external-sessions";
 
-export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "external_session_available" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
+export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "external_session_available" | "document_replacement_requested" | "documents_approved" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
 
 export type QueuedEmail = {
   organizationId: string;
@@ -17,12 +17,13 @@ export type QueuedEmail = {
   idempotencyDiscriminator?: string;
   /** Worker-only: preserves the persisted key when a queued visibility cycle is retried. */
   idempotencyKey?: string;
+  safeMetadata?: Record<string, string>;
 };
 
 export type CommunicationBatchResult = { considered: number; claimed: number; sent: number; retryScheduled: number; permanentlyFailed: number; skipped: number; claimConflicts: number };
-type QueueRow = { id: string; organization_id: string; appointment_request_id: string | null; customer_id: string | null; message_type: string; recipient_email: string; subject: string; body_html: string | null; provider: string; status: string; attempt_count: number | null; next_attempt_at: string | null; processing_started_at: string | null; idempotency_key: string | null };
+type QueueRow = { id: string; organization_id: string; appointment_request_id: string | null; customer_id: string | null; message_type: string; recipient_email: string; subject: string; body_html: string | null; provider: string; status: string; attempt_count: number | null; next_attempt_at: string | null; processing_started_at: string | null; idempotency_key: string | null; metadata: Record<string, string> | null };
 const maximumAttempts = 3;
-export type ExternalSessionDeliverySuppressionReason = "payment_ineligible" | "appointment_ineligible" | "session_ineligible" | "recipient_changed" | "recipient_unavailable" | "tenant_mismatch" | "appointment_mismatch" | "launch_unavailable" | "workspace_unavailable";
+export type ExternalSessionDeliverySuppressionReason = "payment_ineligible" | "appointment_ineligible" | "session_ineligible" | "recipient_changed" | "recipient_unavailable" | "tenant_mismatch" | "appointment_mismatch" | "launch_unavailable" | "workspace_unavailable" | "document_state_changed" | "document_replaced" | "document_removed" | "document_set_changed";
 
 type ExternalSessionDeliveryEligibility = { eligible: true } | { eligible: false; reason: ExternalSessionDeliverySuppressionReason };
 
@@ -85,6 +86,27 @@ async function suppressExternalSessionAvailableDelivery(supabase: SupabaseClient
   return { status: "skipped" as const, providerMessageId: null, error: safeReason };
 }
 
+async function checkDocumentReviewDeliveryEligibility(supabase: SupabaseClient, message: QueueRow, type: "document_replacement_requested" | "documents_approved"): Promise<ExternalSessionDeliveryEligibility> {
+  if (!message.appointment_request_id) return { eligible: false, reason: "appointment_mismatch" };
+  const { data: appointment } = await supabase.from("appointment_requests").select("id,organization_id,status,customer_id,customers!inner(email)").eq("id", message.appointment_request_id).eq("organization_id", message.organization_id).maybeSingle();
+  if (!appointment || appointment.organization_id !== message.organization_id) return { eligible: false, reason: "appointment_ineligible" };
+  if (appointment.customer_id !== message.customer_id) return { eligible: false, reason: "appointment_mismatch" };
+  if (["cancelled", "declined"].includes(appointment.status)) return { eligible: false, reason: "appointment_ineligible" };
+  const customer = Array.isArray(appointment.customers) ? appointment.customers[0] : appointment.customers;
+  if (!isValidRecipient(customer?.email)) return { eligible: false, reason: "recipient_unavailable" };
+  if (customer.email.toLowerCase() !== message.recipient_email.toLowerCase()) return { eligible: false, reason: "recipient_changed" };
+  const { data: documents } = await supabase.from("appointment_document_files").select("id,status,reviewed_at").eq("organization_id", message.organization_id).eq("appointment_request_id", message.appointment_request_id).is("deleted_at", null);
+  const active = documents ?? [];
+  if (type === "document_replacement_requested") {
+    const targetId = message.metadata?.documentId;
+    const target = active.find((document) => document.id === targetId);
+    if (!target) return { eligible: false, reason: "document_removed" };
+    if (target.status !== "rejected") return { eligible: false, reason: "document_state_changed" };
+  } else if (active.length === 0 || active.some((document) => document.status !== "approved")) return { eligible: false, reason: "document_set_changed" };
+  const { data: token } = await supabase.from("appointment_access_tokens").select("id").eq("organization_id", message.organization_id).eq("appointment_request_id", message.appointment_request_id).eq("purpose", "client_workspace").is("revoked_at", null).gt("expires_at", new Date().toISOString()).maybeSingle();
+  return token ? { eligible: true } : { eligible: false, reason: "workspace_unavailable" };
+}
+
 function safeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
@@ -133,11 +155,12 @@ export async function enqueueAndProcessEmail(supabase: SupabaseClient, input: Qu
       body_html: input.html,
       status: "queued",
       idempotency_key: idempotencyKey,
+      metadata: input.safeMetadata ?? {},
       next_attempt_at: new Date().toISOString()
     }).select().single();
   if (insertError) throw insertError;
 
-  const preSendEligibleMessage = input.type === "external_session_available";
+  const preSendEligibleMessage = input.type === "external_session_available" || input.type === "document_replacement_requested" || input.type === "documents_approved";
   const { data: claimed } = await supabase.from("communication_messages")
     .update(preSendEligibleMessage
       ? { status: "processing", processing_started_at: new Date().toISOString() }
@@ -146,7 +169,7 @@ export async function enqueueAndProcessEmail(supabase: SupabaseClient, input: Qu
   if (!claimed) return { status: "skipped", providerMessageId: null, error: "Communication is already being processed." };
 
   if (preSendEligibleMessage) {
-    const eligibility = await checkExternalSessionAvailableDeliveryEligibility(supabase, message);
+    const eligibility = input.type === "external_session_available" ? await checkExternalSessionAvailableDeliveryEligibility(supabase, message) : await checkDocumentReviewDeliveryEligibility(supabase, message, input.type as "document_replacement_requested" | "documents_approved");
     if (!eligibility.eligible) return suppressExternalSessionAvailableDelivery(supabase, message, eligibility.reason);
     const { data: attempted } = await supabase.from("communication_messages")
       .update({ last_attempted_at: new Date().toISOString(), attempt_count: Number(message.attempt_count ?? 0) + 1 })
