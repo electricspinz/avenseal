@@ -12,7 +12,10 @@ export function isCustomerVisibleExternalSession(input: { paymentStatus: string 
   if (!session || session.organizationId !== input.organizationId || session.appointmentId !== input.appointmentId) return false;
   if (input.paymentStatus !== "paid" || !["confirmed", "ready"].includes(input.appointmentStatus)) return false;
   if (!["scheduled", "ready", "in_progress"].includes(session.status) || !session.launchUrl) return false;
-  try { return new URL(session.launchUrl).protocol === "https:"; } catch { return false; }
+  try {
+    const launchUrl = new URL(session.launchUrl);
+    return launchUrl.protocol === "https:" && !launchUrl.username && !launchUrl.password;
+  } catch { return false; }
 }
 
 export function isCustomerVisibleExternalSessionStatus(status: ExternalSessionStatus) { return ["scheduled", "ready", "in_progress"].includes(status); }

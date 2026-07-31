@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
+import { isCustomerVisibleExternalSession, type ExternalSession } from "@/lib/server/external-sessions";
 
-export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
+export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "external_session_available" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
 
 export type QueuedEmail = {
   organizationId: string;
@@ -13,11 +14,76 @@ export type QueuedEmail = {
   subject: string;
   html: string;
   provider?: string;
+  idempotencyDiscriminator?: string;
+  /** Worker-only: preserves the persisted key when a queued visibility cycle is retried. */
+  idempotencyKey?: string;
 };
 
 export type CommunicationBatchResult = { considered: number; claimed: number; sent: number; retryScheduled: number; permanentlyFailed: number; skipped: number; claimConflicts: number };
-type QueueRow = { id: string; organization_id: string; appointment_request_id: string | null; customer_id: string | null; message_type: string; recipient_email: string; subject: string; body_html: string | null; provider: string; status: string; attempt_count: number | null; next_attempt_at: string | null; processing_started_at: string | null };
+type QueueRow = { id: string; organization_id: string; appointment_request_id: string | null; customer_id: string | null; message_type: string; recipient_email: string; subject: string; body_html: string | null; provider: string; status: string; attempt_count: number | null; next_attempt_at: string | null; processing_started_at: string | null; idempotency_key: string | null };
 const maximumAttempts = 3;
+export type ExternalSessionDeliverySuppressionReason = "payment_ineligible" | "appointment_ineligible" | "session_ineligible" | "recipient_changed" | "recipient_unavailable" | "tenant_mismatch" | "appointment_mismatch" | "launch_unavailable" | "workspace_unavailable";
+
+type ExternalSessionDeliveryEligibility = { eligible: true } | { eligible: false; reason: ExternalSessionDeliverySuppressionReason };
+
+function isValidRecipient(value: string | null | undefined): value is string {
+  return Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+}
+
+function mapEligibilitySession(row: Record<string, unknown>): ExternalSession {
+  return {
+    organizationId: String(row.organization_id), appointmentId: String(row.appointment_request_id), provider: String(row.provider ?? ""),
+    sessionName: String(row.session_name ?? ""), launchUrl: typeof row.launch_url === "string" ? row.launch_url : null,
+    referenceNumber: typeof row.reference_number === "string" ? row.reference_number : null,
+    status: String(row.status) as ExternalSession["status"], notes: typeof row.notes === "string" ? row.notes : null,
+    createdAt: String(row.created_at ?? ""), updatedAt: String(row.updated_at ?? ""),
+    metadata: row.metadata && typeof row.metadata === "object" ? row.metadata as ExternalSession["metadata"] : {}
+  };
+}
+
+/** Re-reads only trusted persisted state immediately before this sensitive handoff email leaves Avenseal. */
+export async function checkExternalSessionAvailableDeliveryEligibility(supabase: SupabaseClient, message: Pick<QueueRow, "organization_id" | "appointment_request_id" | "customer_id" | "recipient_email">): Promise<ExternalSessionDeliveryEligibility> {
+  if (!message.appointment_request_id) return { eligible: false, reason: "appointment_mismatch" };
+  const { data: appointment } = await supabase.from("appointment_requests")
+    .select("id,organization_id,status,customer_id,customers!inner(email)")
+    .eq("id", message.appointment_request_id).eq("organization_id", message.organization_id).maybeSingle();
+  if (!appointment) return { eligible: false, reason: "appointment_ineligible" };
+  if (appointment.organization_id !== message.organization_id) return { eligible: false, reason: "tenant_mismatch" };
+  if (appointment.id !== message.appointment_request_id || appointment.customer_id !== message.customer_id) return { eligible: false, reason: "appointment_mismatch" };
+  const customer = Array.isArray(appointment.customers) ? appointment.customers[0] : appointment.customers;
+  const customerEmail = customer?.email as string | null | undefined;
+  if (!isValidRecipient(customerEmail)) return { eligible: false, reason: "recipient_unavailable" };
+  if (customerEmail.toLowerCase() !== message.recipient_email.toLowerCase()) return { eligible: false, reason: "recipient_changed" };
+
+  const { data: session } = await supabase.from("external_sessions").select("*")
+    .eq("organization_id", message.organization_id).eq("appointment_request_id", message.appointment_request_id).maybeSingle();
+  if (!session) return { eligible: false, reason: "session_ineligible" };
+  const { data: payment } = await supabase.from("appointment_payments").select("status")
+    .eq("organization_id", message.organization_id).eq("appointment_request_id", message.appointment_request_id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (payment?.status !== "paid") return { eligible: false, reason: "payment_ineligible" };
+  if (!["confirmed", "ready"].includes(appointment.status)) return { eligible: false, reason: "appointment_ineligible" };
+  const externalSession = mapEligibilitySession(session as Record<string, unknown>);
+  if (!externalSession.launchUrl) return { eligible: false, reason: "launch_unavailable" };
+  try {
+    const launchUrl = new URL(externalSession.launchUrl);
+    if (launchUrl.protocol !== "https:" || launchUrl.username || launchUrl.password) return { eligible: false, reason: "launch_unavailable" };
+  } catch {
+    return { eligible: false, reason: "launch_unavailable" };
+  }
+  if (!isCustomerVisibleExternalSession({ paymentStatus: payment.status, appointmentStatus: appointment.status, organizationId: message.organization_id, appointmentId: message.appointment_request_id, session: externalSession })) return { eligible: false, reason: "session_ineligible" };
+
+  const { data: workspaceToken } = await supabase.from("appointment_access_tokens").select("id")
+    .eq("organization_id", message.organization_id).eq("appointment_request_id", message.appointment_request_id).eq("purpose", "client_workspace")
+    .is("revoked_at", null).gt("expires_at", new Date().toISOString()).limit(1).maybeSingle();
+  return workspaceToken ? { eligible: true } : { eligible: false, reason: "workspace_unavailable" };
+}
+
+async function suppressExternalSessionAvailableDelivery(supabase: SupabaseClient, message: QueueRow, reason: ExternalSessionDeliverySuppressionReason) {
+  const safeReason = `External session delivery suppressed: ${reason}.`;
+  await supabase.from("communication_messages").update({ status: "cancelled", last_error: safeReason, next_attempt_at: null }).eq("id", message.id).eq("status", "processing");
+  await supabase.from("audit_logs").insert({ organization_id: message.organization_id, action: "external_session.communication_suppressed", entity_type: "appointment_request", entity_id: message.appointment_request_id, metadata: { communicationType: "external_session_available", deliveryStatus: "cancelled", reason } });
+  return { status: "skipped" as const, providerMessageId: null, error: safeReason };
+}
 
 function safeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -30,8 +96,8 @@ export function renderEmailTemplate(input: { greetingName: string; body: string;
   return `<p>Hi ${safeHtml(input.greetingName)},</p><p>${safeHtml(input.body)}</p>${action}<p>${safeHtml(input.footer)}</p>`;
 }
 
-export function communicationIdempotencyKey(input: Pick<QueuedEmail, "organizationId" | "appointmentId" | "type" | "recipient">) {
-  return createHash("sha256").update([input.organizationId, input.appointmentId ?? "", input.type, input.recipient.toLowerCase()].join(":"), "utf8").digest("hex");
+export function communicationIdempotencyKey(input: Pick<QueuedEmail, "organizationId" | "appointmentId" | "type" | "recipient" | "idempotencyDiscriminator">) {
+  return createHash("sha256").update([input.organizationId, input.appointmentId ?? "", input.type, input.recipient.toLowerCase(), input.idempotencyDiscriminator ?? ""].join(":"), "utf8").digest("hex");
 }
 
 function stagingRecipientAllowed(recipient: string) {
@@ -41,7 +107,7 @@ function stagingRecipientAllowed(recipient: string) {
 }
 
 export async function enqueueAndProcessEmail(supabase: SupabaseClient, input: QueuedEmail): Promise<EmailDeliveryResult> {
-  const idempotencyKey = communicationIdempotencyKey(input);
+  const idempotencyKey = input.idempotencyKey ?? communicationIdempotencyKey(input);
   const { data: existing, error: existingError } = await supabase
     .from("communication_messages")
     .select("*")
@@ -71,10 +137,22 @@ export async function enqueueAndProcessEmail(supabase: SupabaseClient, input: Qu
     }).select().single();
   if (insertError) throw insertError;
 
+  const preSendEligibleMessage = input.type === "external_session_available";
   const { data: claimed } = await supabase.from("communication_messages")
-    .update({ status: "processing", processing_started_at: new Date().toISOString(), last_attempted_at: new Date().toISOString(), attempt_count: Number(message.attempt_count ?? 0) + 1 })
+    .update(preSendEligibleMessage
+      ? { status: "processing", processing_started_at: new Date().toISOString() }
+      : { status: "processing", processing_started_at: new Date().toISOString(), last_attempted_at: new Date().toISOString(), attempt_count: Number(message.attempt_count ?? 0) + 1 })
     .eq("id", message.id).eq("status", "queued").select().maybeSingle();
   if (!claimed) return { status: "skipped", providerMessageId: null, error: "Communication is already being processed." };
+
+  if (preSendEligibleMessage) {
+    const eligibility = await checkExternalSessionAvailableDeliveryEligibility(supabase, message);
+    if (!eligibility.eligible) return suppressExternalSessionAvailableDelivery(supabase, message, eligibility.reason);
+    const { data: attempted } = await supabase.from("communication_messages")
+      .update({ last_attempted_at: new Date().toISOString(), attempt_count: Number(message.attempt_count ?? 0) + 1 })
+      .eq("id", message.id).eq("status", "processing").select().maybeSingle();
+    if (!attempted) return { status: "skipped", providerMessageId: null, error: "Communication is no longer available for delivery." };
+  }
 
   if (!stagingRecipientAllowed(input.recipient)) {
     console.info("[communications] delivery skipped by staging recipient policy.", { communicationId: message.id });
@@ -116,7 +194,8 @@ export async function processCommunicationBatch(supabase: SupabaseClient, option
     }
     const delivery = await enqueueAndProcessEmail(supabase, {
       organizationId: message.organization_id, appointmentId: message.appointment_request_id, customerId: message.customer_id,
-      type: message.message_type as CommunicationTemplate, recipient: message.recipient_email, subject: message.subject, html: message.body_html ?? "", provider: message.provider
+      type: message.message_type as CommunicationTemplate, recipient: message.recipient_email, subject: message.subject, html: message.body_html ?? "", provider: message.provider,
+      idempotencyKey: message.idempotency_key ?? undefined
     });
     if (delivery.status === "sent") { result.claimed++; result.sent++; }
     else if (delivery.status === "failed") {

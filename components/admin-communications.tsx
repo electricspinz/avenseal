@@ -13,6 +13,7 @@ export const communicationTypeLabels: Record<string, string> = {
   appointment_rescheduled: "Appointment rescheduled",
   payment_required: "Payment required",
   payment_confirmed: "Payment confirmed",
+  external_session_available: "External Session Available",
   appointment_updated: "Appointment updated"
 };
 
