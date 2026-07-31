@@ -1,5 +1,6 @@
 import type { AdminCommunication, AppointmentRequest } from "@/lib/types";
 import { repository } from "@/lib/server/repository";
+import { readinessTransitionAuditSource, readinessAlertFromAudit } from "@/lib/server/readiness-alerts";
 
 export type OperationsFeedEventType =
   | "appointment_created"
@@ -8,7 +9,8 @@ export type OperationsFeedEventType =
   | "communication_queued"
   | "communication_sent"
   | "communication_failed"
-  | "calendar_integration_connected";
+  | "calendar_integration_connected"
+  | "readiness_alert";
 
 export type OperationsFeedSeverity = "info" | "success" | "warning" | "error";
 
@@ -18,7 +20,7 @@ export type OperationsFeedItem = {
   eventType: OperationsFeedEventType;
   title: string;
   description: string;
-  source: "appointment" | "communication" | "integration";
+  source: "appointment" | "communication" | "integration" | "readiness";
   customerName: string | null;
   appointmentId: string | null;
   destinationUrl: string | null;
@@ -30,28 +32,54 @@ export type OperationsFeedViewModel = {
   unavailableSources: string[];
 };
 
-export type OperationsFeedRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations">;
+export type OperationsFeedRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations" | "listReadinessTransitionAlertSources">;
 
 const maximumItems = 20;
 
 export async function loadOperationsFeed(dataSource: OperationsFeedRepository = repository): Promise<OperationsFeedViewModel> {
-  const [appointmentsResult, communicationsResult, integrationsResult] = await Promise.allSettled([
+  const [appointmentsResult, communicationsResult, integrationsResult, readinessResult] = await Promise.allSettled([
     dataSource.listAppointments(),
     dataSource.listAdminCommunications({ page: 1 }),
-    dataSource.listIntegrations()
+    dataSource.listIntegrations(),
+    dataSource.listReadinessTransitionAlertSources()
   ]);
   const unavailableSources = [
     appointmentsResult.status !== "fulfilled" && "Appointments",
     communicationsResult.status !== "fulfilled" && "Communications",
-    integrationsResult.status !== "fulfilled" && "Integrations"
+    integrationsResult.status !== "fulfilled" && "Integrations",
+    readinessResult.status !== "fulfilled" && "Readiness alerts"
   ].filter((source): source is string => Boolean(source));
   const items = [
     ...(appointmentsResult.status === "fulfilled" ? appointmentEvents(appointmentsResult.value) : []),
     ...(communicationsResult.status === "fulfilled" ? communicationEvents(communicationsResult.value.records) : []),
-    ...(integrationsResult.status === "fulfilled" ? integrationEvents(integrationsResult.value) : [])
+    ...(integrationsResult.status === "fulfilled" ? integrationEvents(integrationsResult.value) : []),
+    ...(readinessResult.status === "fulfilled" ? readinessAlertEvents(readinessResult.value) : [])
   ].sort(compareFeedItems).slice(0, maximumItems);
 
   return { items, unavailableSources };
+}
+
+function readinessAlertEvents(sources: Awaited<ReturnType<OperationsFeedRepository["listReadinessTransitionAlertSources"]>>): OperationsFeedItem[] {
+  const alerts = new Map<string, OperationsFeedItem>();
+  for (const source of sources) {
+    const audit = readinessTransitionAuditSource(source);
+    if (!audit) continue;
+    const alert = readinessAlertFromAudit(audit);
+    if (!alert || alerts.has(alert.id)) continue;
+    alerts.set(alert.id, {
+      id: `readiness-alert:${source.id}`,
+      timestamp: alert.createdAt,
+      eventType: "readiness_alert",
+      title: alert.title,
+      description: alert.description,
+      source: "readiness",
+      customerName: null,
+      appointmentId: alert.appointmentId,
+      destinationUrl: alert.destinationUrl,
+      severity: alert.severity
+    });
+  }
+  return [...alerts.values()];
 }
 
 function appointmentEvents(appointments: AppointmentRequest[]): OperationsFeedItem[] {

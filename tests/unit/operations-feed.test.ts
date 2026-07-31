@@ -12,11 +12,12 @@ function communication(id: string, status: AdminCommunication["status"], timesta
   return { id, source: "message", messageId: id, appointmentId: "appointment-1", customerId: "customer", customerName: "Customer One", messageType: "booking_confirmation", recipientEmail: "customer@example.com", subject: "Confirmation", bodyHtml: null, status, scheduledFor: status === "scheduled" ? timestamp : null, queuedAt: status === "queued" ? timestamp : null, sentAt: status === "sent" ? timestamp : null, attemptCount: 1, lastAttemptedAt: status === "failed" ? timestamp : null, lastError: status === "failed" ? "Provider error" : null, providerMessageId: null, createdAt: timestamp, updatedAt: timestamp };
 }
 
-function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>; communications: Promise<{ records: AdminCommunication[]; currentPage: number; totalPages: number; totalRecords: number }>; integrations: Promise<Integrations> }> = {}): OperationsFeedRepository {
+function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>; communications: Promise<{ records: AdminCommunication[]; currentPage: number; totalPages: number; totalRecords: number }>; integrations: Promise<Integrations>; readiness: Promise<Awaited<ReturnType<OperationsFeedRepository["listReadinessTransitionAlertSources"]>> > }> = {}): OperationsFeedRepository {
   return {
     listAppointments: () => overrides.appointments ?? Promise.resolve([]),
     listAdminCommunications: () => overrides.communications ?? Promise.resolve({ records: [], currentPage: 1, totalPages: 1, totalRecords: 0 }),
-    listIntegrations: () => overrides.integrations ?? Promise.resolve([])
+    listIntegrations: () => overrides.integrations ?? Promise.resolve([]),
+    listReadinessTransitionAlertSources: () => overrides.readiness ?? Promise.resolve([])
   };
 }
 
@@ -54,6 +55,22 @@ describe("Operations Feed", () => {
     const feed = await loadOperationsFeed(source({ integrations: Promise.resolve(integrations) }));
 
     expect(feed.items[0]).toMatchObject({ eventType: "calendar_integration_connected", severity: "success", destinationUrl: "/admin/settings/integrations" });
+  });
+
+  it("maps approved readiness-transition audits into one safe appointment-linked alert", async () => {
+    const readiness = Promise.resolve([
+      { id: "audit-new", organizationId: "org", appointmentId: "appointment-1", createdAt: "2026-07-28T10:00:00.000Z", metadata: { previousState: "waiting_for_session", currentState: "ready_for_notary", category: "session_progress", readinessTransitionDiscriminator: "session-v1", providerUrl: "https://never-render.example" } },
+      { id: "audit-retry", organizationId: "org", appointmentId: "appointment-1", createdAt: "2026-07-27T10:00:00.000Z", metadata: { previousState: "waiting_for_session", currentState: "ready_for_notary", category: "session_progress", readinessTransitionDiscriminator: "session-v1" } },
+      { id: "audit-other-appointment", organizationId: "org", appointmentId: "appointment-3", createdAt: "2026-07-27T11:00:00.000Z", metadata: { previousState: "waiting_for_session", currentState: "ready_for_notary", category: "session_progress", readinessTransitionDiscriminator: "session-v1" } },
+      { id: "audit-progress", organizationId: "org", appointmentId: "appointment-2", createdAt: "2026-07-26T10:00:00.000Z", metadata: { previousState: "waiting_for_documents", currentState: "waiting_for_review", category: "document_progress", readinessTransitionDiscriminator: "document-v1" } }
+    ]);
+    const feed = await loadOperationsFeed(source({ readiness }));
+    expect(feed.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "readiness-alert:audit-new", eventType: "readiness_alert", title: "Ready for notarization", severity: "success", destinationUrl: "/admin/appointments/appointment-1", customerName: null }),
+      expect.objectContaining({ id: "readiness-alert:audit-other-appointment", destinationUrl: "/admin/appointments/appointment-3" })
+    ]));
+    expect(feed.items).toHaveLength(2);
+    expect(JSON.stringify(feed.items)).not.toContain("never-render.example");
   });
 
   it("returns an empty feed when successful sources contain no activity", async () => {
