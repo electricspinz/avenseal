@@ -46,7 +46,8 @@ import type {
   CustomerAppointmentStatus,
   DocumentCategory,
   OrganizationService,
-  OrganizationSettings
+  OrganizationSettings,
+  PaymentStatus
 } from "@/lib/types";
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
@@ -636,6 +637,38 @@ export const repository = {
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data.map(mapAppointment);
+  },
+  async listPaymentReadinessSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("appointment_payments")
+      .select("organization_id,appointment_request_id,status,created_at")
+      .eq("organization_id", organizationId)
+      .in("appointment_request_id", [...appointmentIds])
+      .order("created_at", { ascending: false });
+    if (error && error.code !== "PGRST205") throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: row.organization_id,
+      appointmentId: row.appointment_request_id,
+      status: row.status as PaymentStatus
+    }));
+  },
+  async listExternalSessionReadinessSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("external_sessions")
+      .select("organization_id,appointment_request_id,status")
+      .eq("organization_id", organizationId)
+      .in("appointment_request_id", [...appointmentIds]);
+    if (error?.code === "PGRST205") return [];
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: row.organization_id,
+      appointmentId: row.appointment_request_id,
+      status: row.status as ExternalSessionStatus
+    }));
   },
   async ensureAppointmentPaymentObligation(appointment: AppointmentRequest) {
     if (!hasSupabaseServiceConfig()) return null;

@@ -1,6 +1,7 @@
 import type { AppointmentRequest, OrganizationSettings } from "@/lib/types";
 import { isValidTimezone } from "@/lib/availability";
 import { repository } from "@/lib/server/repository";
+import { getMissionControlReadinessOverview, type MissionControlReadinessOverview } from "@/lib/server/mission-control-readiness";
 
 type HealthStatus = "healthy" | "attention" | "unconfigured" | "unavailable" | "unknown";
 
@@ -34,6 +35,7 @@ export type MissionControlViewModel = {
   snapshot: MissionControlSnapshotMetric[];
   systemHealth: MissionControlHealthCard[];
   settings: OrganizationSettings | null;
+  readiness: MissionControlReadinessOverview | null;
 };
 
 export async function loadMissionControlViewModel(
@@ -57,6 +59,9 @@ export async function loadMissionControlViewModel(
     : null;
   const appointmentMetrics = appointments && localNow
     ? appointmentMetricValues(appointments, localNow.date, localNow.time)
+    : null;
+  const readiness = appointments
+    ? await getMissionControlReadinessOverview(settings?.business.organizationId ?? appointments[0]?.organizationId ?? "", appointments).catch(() => null)
     : null;
 
   return {
@@ -82,7 +87,8 @@ export async function loadMissionControlViewModel(
       calendarHealth(integrations),
       aiConciergeHealth()
     ],
-    settings
+    settings,
+    readiness
   };
 }
 

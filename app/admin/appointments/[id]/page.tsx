@@ -1,3 +1,4 @@
+import React from "react";
 import { notFound } from "next/navigation";
 import { AdminAppointmentForm } from "@/components/admin-appointment-form";
 import { AdminCard, AdminShell } from "@/components/admin-shell";
@@ -12,6 +13,8 @@ import { ClientWorkspaceAccessCard } from "@/components/client-workspace-access-
 import { AdminAppointmentDocumentsCard } from "@/components/admin-appointment-documents-card";
 import { createAppointmentDocumentRepository } from "@/lib/server/document-repository";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
+import { calculateAppointmentReadiness } from "@/lib/server/appointment-readiness";
+import { AppointmentReadinessCard } from "@/components/appointment-readiness-card";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +32,14 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
   const externalSession = await repository.getExternalSession(appointment.organizationId, appointment.id);
   const clientAccess = await repository.getClientWorkspaceAccessMetadata(appointment.organizationId, appointment.id);
   const documents = hasSupabaseServiceConfig() ? await createAppointmentDocumentRepository(getSupabaseAdmin()).listAppointmentDocuments(appointment.organizationId, appointment.id) : [];
+  const readiness = calculateAppointmentReadiness({
+    organizationId: appointment.organizationId,
+    appointmentId: appointment.id,
+    appointmentStatus: appointment.status,
+    paymentStatus: payments[0]?.status ?? null,
+    documents: documents.map((document) => ({ organizationId: document.organizationId, appointmentId: document.appointmentId, status: document.status, deletedAt: document.deletedAt })),
+    externalSession: externalSession ? { organizationId: externalSession.organizationId, appointmentId: externalSession.appointmentId, status: externalSession.status } : null
+  });
 
   return (
     <AdminShell active="Appointments">
@@ -41,6 +52,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
       </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
+          <AppointmentReadinessCard readiness={readiness} />
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Customer</h2>
             <dl className="mt-4 grid gap-3 text-sm">

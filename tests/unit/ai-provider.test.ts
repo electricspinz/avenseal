@@ -9,7 +9,7 @@ function context(): RecommendationContext {
     missionControl: {
       dailyBrief: { date: "Monday, July 28", hour: 10, appointmentsToday: 2, awaitingReview: 0, communicationsUnavailable: false },
       schedule: { appointments: [], timezone: "America/New_York" },
-      snapshot: [], systemHealth: [], settings: null
+      snapshot: [], systemHealth: [], settings: null, readiness: null
     },
     attentionIssues: [{ id: "communication-failed:one", priority: "critical", category: "communications", title: "Communication failed", description: "A communication could not be sent.", actionLabel: "Open communication", href: "/admin/communications/one", source: "communications", createdAt: "2026-07-28T10:00:00.000Z" }],
     operationsFeed: { items: [{ id: "feed-failure", timestamp: "2026-07-28T10:00:00.000Z", eventType: "communication_failed", title: "Communication failed", description: "A communication could not be sent.", source: "communication", customerName: null, appointmentId: null, destinationUrl: "/admin/communications/one", severity: "error" }], unavailableSources: [] }
