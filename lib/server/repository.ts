@@ -682,15 +682,29 @@ export const repository = {
       developmentExternalSessions.set(externalSessionKey(organizationId, appointmentId), session);
       return session;
     }
+    const existing = await this.getExternalSession(organizationId, appointmentId);
     const { data, error } = await getSupabaseAdmin().from("external_sessions").upsert({ organization_id: organizationId, appointment_request_id: appointmentId, provider: input.provider, session_name: input.sessionName, launch_url: input.launchUrl ?? null, reference_number: input.referenceNumber ?? null, status: input.status, notes: input.notes ?? null, metadata: {}, updated_at: new Date().toISOString() }, { onConflict: "organization_id,appointment_request_id" }).select().single();
     if (error) throw error;
-    return mapExternalSession(data);
+    const saved = mapExternalSession(data);
+    const previousVisible = existing ? ["scheduled", "ready", "in_progress"].includes(existing.status) : false;
+    const visible = ["scheduled", "ready", "in_progress"].includes(saved.status);
+    const audit = getSupabaseAdmin();
+    await audit.from("audit_logs").insert({ organization_id: organizationId, action: existing ? "external_session.updated" : "external_session.created", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider: saved.provider, previousStatus: existing?.status ?? null, status: saved.status, actorType: "staff", hasLaunchUrl: Boolean(saved.launchUrl) } });
+    if (visible !== previousVisible) await audit.from("audit_logs").insert({ organization_id: organizationId, action: visible ? "external_session.customer_visible" : "external_session.customer_hidden", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider: saved.provider, previousStatus: existing?.status ?? null, status: saved.status, actorType: "staff", previousVisible, visible, hasLaunchUrl: Boolean(saved.launchUrl) } });
+    return saved;
   },
   async removeExternalSession(organizationId: string, appointmentId: string) {
     if (!hasSupabaseServiceConfig()) return developmentExternalSessions.delete(externalSessionKey(organizationId, appointmentId));
+    const existing = await this.getExternalSession(organizationId, appointmentId);
     const { error } = await getSupabaseAdmin().from("external_sessions").delete().eq("organization_id", organizationId).eq("appointment_request_id", appointmentId);
     if (error) throw error;
+    if (existing) await getSupabaseAdmin().from("audit_logs").insert({ organization_id: organizationId, action: "external_session.removed", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider: existing.provider, previousStatus: existing.status, actorType: "staff", hasLaunchUrl: Boolean(existing.launchUrl) } });
     return true;
+  },
+  async recordExternalSessionOpened(organizationId: string, appointmentId: string, provider: string) {
+    if (!hasSupabaseServiceConfig()) return;
+    const { error } = await getSupabaseAdmin().from("audit_logs").insert({ organization_id: organizationId, action: "external_session.customer_opened", entity_type: "appointment_request", entity_id: appointmentId, metadata: { provider, actorType: "customer" } });
+    if (error) throw error;
   },
   async issueClientWorkspaceToken(input: { organizationId: string; appointmentId: string; expiresAt: string; createdBy?: string | null }) {
     const token = generateAppointmentAccessToken();

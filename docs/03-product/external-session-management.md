@@ -1,6 +1,6 @@
 # External Session Management
 
-**Status: Current manual foundation.** An External Session is optional provider-neutral appointment metadata that staff can enter manually. Avenseal continues to own business workflow; the external provider performs the live notarization session.
+**Status: Durable manual foundation.** Migration `0014_client_workspace_persistence.sql` persists tenant-scoped External Sessions. Staff manage the session; Avenseal owns scheduling, payment, and preparation while the external provider performs identity verification and the live notarization.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ The appointment detail page calls a tenant-scoped External Session boundary. The
 | Reference number and notes | Optional, admin-only |
 | Status | Manual pending, scheduled, ready, in progress, completed, cancelled, or unknown |
 
-Staff can add, edit, remove, open, and copy a session in Appointment Details. The portal shows an honest waiting state when one is absent. This metadata does not change Workflow Engine state, automate actions, synchronize with a provider, or imply that a session is confirmed.
+Staff can add, edit, remove, open, and copy a session in Appointment Details. A customer launch action is available only after payment is paid, the appointment is confirmed or ready, and the session is scheduled, ready, or in progress with a trusted HTTPS URL. Pending, completed, cancelled, and failed sessions remain hidden behind the honest waiting state. Customer opening is audited without recording the raw launch URL or access token. This metadata does not change Workflow Engine state, automate actions, synchronize with a provider, or imply that a session is confirmed.
 
 ## Connected Services relationship and limitations
 
