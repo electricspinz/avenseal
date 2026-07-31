@@ -670,6 +670,26 @@ export const repository = {
       status: row.status as ExternalSessionStatus
     }));
   },
+  async listReadinessTransitionAlertSources() {
+    if (!hasSupabaseServiceConfig()) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("audit_logs")
+      .select("id,organization_id,entity_id,metadata,created_at")
+      .eq("organization_id", organizationId)
+      .eq("action", "appointment.readiness_changed")
+      .eq("entity_type", "appointment_request")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+      appointmentId: row.entity_id,
+      createdAt: row.created_at,
+      metadata: row.metadata
+    }));
+  },
   async ensureAppointmentPaymentObligation(appointment: AppointmentRequest) {
     if (!hasSupabaseServiceConfig()) return null;
     if (!appointment.serviceId || appointment.servicePriceCentsSnapshot === null || !appointment.serviceCurrencySnapshot) {

@@ -42,4 +42,38 @@ Sprint 25.3A makes Client Workspace the first customer-facing readiness consumer
 
 Customer readiness intentionally omits operational reasons, raw appointment/payment status, document review details, provider metadata, session URLs, and all token or storage data. `blocked` becomes the generic customer state **Action required**. If a readiness source is unavailable or calculation cannot complete, the projection conservatively uses that same state while preserving the rest of Client Workspace. The card does not imply that Avenseal performs identity verification or notarization; BlueNotary continues to perform the live remote online notarization session. This work adds no persistence, automation, communications, payment/document/session workflow, or historical readiness tracking.
 
+## Readiness transition detection
+
+Sprint 25.4A adds a server-only, callable transition boundary for trusted workflows that have already changed underlying records. It compares two canonical readiness results; it never recalculates rules or persists a current readiness value. A meaningful transition produces the safe `appointment.readiness_changed` audit event, scoped to its organization and appointment. No communication, automation, reminder, session creation, or appointment mutation follows from this event.
+
+| Category | Meaningful examples |
+| --- | --- |
+| `payment_progress` | `waiting_for_payment` advances to a document or later active readiness state. |
+| `document_progress` | Documents move into review, a replacement returns to review, or review advances to session readiness. |
+| `document_regression` | Review or an otherwise-ready appointment requires a replacement document. |
+| `session_progress` | An online session becomes ready or starts. |
+| `readiness_achieved` / `readiness_lost` | A later active state becomes ready, or a ready appointment loses its session readiness. |
+| `blocked` / `terminal` | An active appointment becomes blocked, cancelled, or completed. |
+| `no_change` | The canonical state is unchanged, or a changed pair has no current audit policy. |
+
+The boundary requires a trusted, stable discriminator supplied by the invoking workflow from persisted facts. It checks for an existing audit record with the same organization, appointment, action, and discriminator before writing, so a retried invocation does not add another audit record. A later or reverse transition must use its own discriminator and receives its own audit event. The current `audit_logs` table has no uniqueness constraint, so this is a scoped repository duplicate guard rather than a new persistence model; callers must not use random values, browser input, tokens, notes, or URLs as discriminators.
+
+Audit metadata contains only previous and current canonical states, a category, `actorType: system`, and the discriminator. It excludes customer data, payment/processor identifiers, document names and review notes, provider URLs and references, tokens, and storage data. Future trusted workflows may invoke this informational boundary after their own state change, but readiness remains derived and no readiness automation is implemented.
+
+## Staff readiness alerts
+
+Sprint 25.4B makes the Operations Feed the first staff-facing consumer of readiness-transition audits. It does not create another alert store: the existing, tenant-scoped `appointment.readiness_changed` audit event is projected into one informational feed item when it matches an approved high-value transition. The only destination is the existing Appointment Details route, where normal authorization remains enforced.
+
+| Transition | Alert | Severity |
+| --- | --- | --- |
+| `waiting_for_session` → `ready_for_notary` | Ready for notarization | Success |
+| `ready_for_notary` → `waiting_for_replacement` | Document replacement needed | Warning |
+| `ready_for_notary` → `waiting_for_session` | Online session unavailable | Warning |
+| Active → `blocked` | Appointment requires attention | Error |
+| Active → `cancelled` | Appointment cancelled | Warning |
+
+No alert is projected for unchanged readiness, ordinary payment/document progress, replacement resolution, or completion. Alert title, explanation, severity, transition category, timestamp, appointment route, and a stable discriminator are derived server-side from the canonical transition; no browser input or raw readiness source is accepted. Customer communications, appointment mutation, BlueNotary automation, alert dismissal, escalation, and assignment remain out of scope.
+
+Repeated records with the same organization, appointment, alert category, and transition discriminator collapse to one feed item. As with readiness audits, the underlying lookup-before-insert pattern does not provide a distributed atomic uniqueness guarantee because `audit_logs` has no matching unique constraint; a later hardening sprint can add one only if required. The Operations Feed repository query is tenant-scoped and its projection excludes customer document data, payment/processor data, review data, provider links/references, tokens, and storage data.
+
 Related: [Secure Document Storage](secure-document-storage.md) · [External Session Management](external-session-management.md) · [Client Portal Foundation](client-portal.md)

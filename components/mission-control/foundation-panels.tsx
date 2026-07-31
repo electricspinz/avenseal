@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import { AlertTriangle, BrainCircuit, CalendarDays, CheckCircle2, CircleAlert, Info, MessageSquareMore, Settings2, Waypoints } from "lucide-react";
 import { AdminCard } from "@/components/admin-shell";
