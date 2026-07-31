@@ -11,6 +11,7 @@ describe("Client Portal foundation", () => {
   it("projects only safe trusted appointment data through the secure query boundary", async () => {
     const portal = await queryClientPortal("valid-token", { async getAppointmentByAccessToken(token) { return token === "valid-token" ? status : null; }, async getExternalSession() { return null; } });
     expect(portal?.appointment.reference).toBe("AVEN-1234");
+    expect(portal?.readiness).toMatchObject({ state: "payment_needed", label: "Payment needed" });
     expect(JSON.stringify(portal)).not.toContain("organization-1");
     await expect(queryClientPortal("other-token", { async getAppointmentByAccessToken() { return null; }, async getExternalSession() { return null; } })).resolves.toBeNull();
   });
@@ -33,6 +34,8 @@ describe("Client Portal foundation", () => {
   it("renders accessible customer-facing sections without payment or mutation controls", () => {
     render(<ClientPortalHome portal={projectPortal(status)} />);
     expect(screen.getByRole("heading", { name: "Welcome, Avery Doe" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your Appointment Status" })).toBeTruthy();
+    expect(screen.getByText("Payment needed")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Preparation checklist" })).toBeTruthy();
     expect(screen.getByText("Document preparation is not yet confirmed in this workspace.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Contact Avenseal" }).getAttribute("href")).toBe("/contact");
@@ -45,5 +48,18 @@ describe("Client Portal foundation", () => {
     const active = projectPortal({ ...status, status: "confirmed", paymentStatus: "paid" }, { appointmentId: "appointment-1", organizationId: "organization-1", provider: "BlueNotary", sessionName: "Online notarization", launchUrl: "https://example.test/session", referenceNumber: "admin-only", status: "scheduled", notes: "admin-only", createdAt: "2026-07-30T10:00:00.000Z", updatedAt: "2026-07-30T10:00:00.000Z", metadata: { internal: true } });
     expect(active.externalSession).toEqual({ availability: "available", provider: "BlueNotary", sessionName: "Online notarization" });
     expect(JSON.stringify(active.externalSession)).not.toContain("admin-only");
+  });
+
+  it("calculates readiness once from token-owned trusted sources and keeps internal records out of its customer projection", async () => {
+    const portal = await queryClientPortal("valid-token", {
+      async getAppointmentByAccessToken() { return { ...status, status: "confirmed", paymentStatus: "paid" }; },
+      async getExternalSession() { return { appointmentId: "appointment-1", organizationId: "organization-1", provider: "BlueNotary", sessionName: "Online notarization", launchUrl: "https://provider.example/private", referenceNumber: "private-reference", status: "ready", notes: "private-note", createdAt: "2026-08-01", updatedAt: "2026-08-01", metadata: { private: true } }; },
+      async getCustomerDocuments() { return [{ id: "document-1", originalFilename: "document.pdf", uploadedAt: "2026-08-01", status: "approved", replacementReason: null }]; },
+      async getReadinessDocuments() { return [{ organizationId: "organization-1", appointmentId: "appointment-1", status: "approved", deletedAt: null }]; }
+    });
+    expect(portal?.readiness).toMatchObject({ state: "ready_for_notarization", label: "Ready for your online notarization" });
+    expect(JSON.stringify(portal?.readiness)).not.toContain("private-reference");
+    expect(JSON.stringify(portal?.readiness)).not.toContain("private-note");
+    expect(JSON.stringify(portal?.readiness)).not.toContain("provider.example");
   });
 });

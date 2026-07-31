@@ -8,7 +8,7 @@ function missionControl(appointmentsToday: number | null): MissionControlViewMod
   return {
     dailyBrief: { date: "Monday, July 28", hour: 10, appointmentsToday, awaitingReview: 0, communicationsUnavailable: false },
     schedule: { appointments: [], timezone: "America/New_York" },
-    snapshot: [], systemHealth: [], settings: null
+    snapshot: [], systemHealth: [], settings: null, readiness: null
   };
 }
 

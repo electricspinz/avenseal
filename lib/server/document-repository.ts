@@ -171,6 +171,21 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
       if (error) throw error;
       return (data ?? []).map((row) => mapDocument(row as DocumentRow));
     },
+    async listReadinessSources(organizationId: string, appointmentIds: readonly string[]) {
+      if (appointmentIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("appointment_document_files")
+        .select("organization_id,appointment_request_id,status,deleted_at")
+        .eq("organization_id", organizationId)
+        .in("appointment_request_id", [...appointmentIds]);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        organizationId: row.organization_id,
+        appointmentId: row.appointment_request_id,
+        status: row.status as AppointmentDocumentStatus,
+        deletedAt: row.deleted_at
+      }));
+    },
     async validateDocumentOwnership(organizationId: string, appointmentId: string, documentId: string) {
       const { data, error } = await supabase.from("appointment_document_files").select(documentSelect).eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).eq("id", documentId).is("deleted_at", null).maybeSingle();
       if (error) throw error;

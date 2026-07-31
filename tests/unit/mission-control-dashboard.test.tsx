@@ -5,7 +5,7 @@ import { AutomationAttentionWidget, CommunicationsAttentionWidget, DashboardErro
 import { loadMissionControlDashboard, type MissionControlDashboardDependencies } from "@/lib/server/mission-control-dashboard";
 
 const dependencies: MissionControlDashboardDependencies = {
-  async loadMissionControl() { return { dailyBrief: { date: "July 29", hour: 9, appointmentsToday: 1, awaitingReview: 0, communicationsUnavailable: false }, schedule: { appointments: [], timezone: "America/New_York" }, snapshot: [{ label: "Scheduled communications", value: 2 }, { label: "Failed communications", value: 1 }], systemHealth: [], settings: null }; },
+  async loadMissionControl() { return { dailyBrief: { date: "July 29", hour: 9, appointmentsToday: 1, awaitingReview: 0, communicationsUnavailable: false }, schedule: { appointments: [], timezone: "America/New_York" }, snapshot: [{ label: "Scheduled communications", value: 2 }, { label: "Failed communications", value: 1 }], systemHealth: [], settings: null, readiness: null }; },
   async loadAttention() { return []; },
   async loadOperationsFeed() { return { items: [], unavailableSources: [] }; }
 };
