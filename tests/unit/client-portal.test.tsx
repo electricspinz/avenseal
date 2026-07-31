@@ -42,8 +42,8 @@ describe("Client Portal foundation", () => {
   it("projects a safe external session and keeps its waiting state honest", () => {
     const waiting = projectPortal(status, null);
     expect(waiting.externalSession.availability).toBe("unavailable");
-    const active = projectPortal(status, { appointmentId: "appointment-1", organizationId: "organization-1", provider: "BlueNotary", sessionName: "Online notarization", launchUrl: "https://example.test/session", referenceNumber: "admin-only", status: "scheduled", notes: "admin-only", createdAt: "2026-07-30T10:00:00.000Z", updatedAt: "2026-07-30T10:00:00.000Z", metadata: { internal: true } });
-    expect(active.externalSession).toEqual({ availability: "available", provider: "BlueNotary", sessionName: "Online notarization", launchUrl: "https://example.test/session", status: "scheduled" });
+    const active = projectPortal({ ...status, status: "confirmed", paymentStatus: "paid" }, { appointmentId: "appointment-1", organizationId: "organization-1", provider: "BlueNotary", sessionName: "Online notarization", launchUrl: "https://example.test/session", referenceNumber: "admin-only", status: "scheduled", notes: "admin-only", createdAt: "2026-07-30T10:00:00.000Z", updatedAt: "2026-07-30T10:00:00.000Z", metadata: { internal: true } });
+    expect(active.externalSession).toEqual({ availability: "available", provider: "BlueNotary", sessionName: "Online notarization" });
     expect(JSON.stringify(active.externalSession)).not.toContain("admin-only");
   });
 });

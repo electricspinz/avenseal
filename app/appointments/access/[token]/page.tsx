@@ -29,7 +29,7 @@ export default async function AppointmentAccessPage({ params }: { params: Promis
 
   return (
     <PublicShell>
-      <ClientPortalHome portal={portal} paymentCard={<ClientPaymentCard token={token} payment={portal.payment} />} />
+      <ClientPortalHome portal={portal} paymentCard={<ClientPaymentCard token={token} payment={portal.payment} />} externalSessionLaunchPath={`/api/appointments/access/${encodeURIComponent(token)}/external-session/launch`} />
     </PublicShell>
   );
 }
