@@ -1203,8 +1203,8 @@ export const repository = {
   async confirmPaymentFromStripe(input: { providerEventId: string; eventType: string; checkoutSessionId?: string; paymentIntentId?: string }) {
     if (!hasSupabaseServiceConfig()) throw new Error("Stripe webhooks require Supabase-backed storage.");
     const supabase = getSupabaseAdmin();
-    const existing = await supabase.from("payment_events").select("id").eq("provider", "stripe").eq("provider_event_id", input.providerEventId).maybeSingle();
-    if (existing.data) return { duplicate: true };
+    const existing = await supabase.from("payment_events").select("id,processing_status").eq("provider", "stripe").eq("provider_event_id", input.providerEventId).maybeSingle();
+    if (existing.data && existing.data.processing_status !== "failed") return { duplicate: true };
 
     const paymentQuery = input.checkoutSessionId
       ? supabase.from("appointment_payments").select("*").eq("stripe_checkout_session_id", input.checkoutSessionId).maybeSingle()
@@ -1225,17 +1225,21 @@ export const repository = {
     }
 
     const organizationId = String(payment.organization_id);
-    await supabase.from("payment_events").insert({
-      organization_id: organizationId,
-      payment_id: payment.id,
-      provider: "stripe",
-      provider_event_id: input.providerEventId,
-      event_type: input.eventType,
-      processing_status: "processed",
-      processed_at: new Date().toISOString(),
-      safe_summary: "Payment event processed."
-    });
+    if (existing.data) {
+      await supabase.from("payment_events").update({ processing_status: "received", processed_at: null, safe_summary: "Payment event retrying." }).eq("id", existing.data.id);
+    } else {
+      await supabase.from("payment_events").insert({
+        organization_id: organizationId,
+        payment_id: payment.id,
+        provider: "stripe",
+        provider_event_id: input.providerEventId,
+        event_type: input.eventType,
+        processing_status: "received",
+        safe_summary: "Payment event received."
+      });
+    }
 
+    try {
     const { data: appointmentRow, error: appointmentError } = await supabase
       .from("appointment_requests")
       .select("*, customers(*)")
@@ -1272,7 +1276,12 @@ export const repository = {
       entity_id: payment.id,
       metadata: { eventType: input.eventType }
     });
+    await supabase.from("payment_events").update({ processing_status: "processed", processed_at: new Date().toISOString(), safe_summary: "Payment event processed." }).eq("provider", "stripe").eq("provider_event_id", input.providerEventId);
     return { confirmed: true };
+    } catch (error) {
+      await supabase.from("payment_events").update({ processing_status: "failed", safe_summary: "Payment event processing failed." }).eq("provider", "stripe").eq("provider_event_id", input.providerEventId);
+      throw error;
+    }
   },
   async getCustomerAppointmentByAccessToken(token: string): Promise<CustomerAppointmentStatus | null> {
     if (!hasSupabaseServiceConfig()) return null;
