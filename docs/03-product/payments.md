@@ -6,6 +6,12 @@ Payments are derived from existing tenant-scoped appointment payment records and
 
 ## Contracts
 
+### Booking payment obligations
+
+When an appointment is persisted, the repository creates one tenant-scoped payment obligation from the immutable appointment service snapshot. Amount and currency are server-derived integer minor units; browser input and Stripe availability do not influence obligation creation. The existing unique appointment/status boundary plus repository lookup make the operation idempotent and preserve paid or processor-linked records. Stripe Checkout is created later, only by the existing payment-request workflow.
+
+Checkout creation updates that same obligation. A usable, unexpired stored Checkout link is reused; otherwise the repository replaces the processor references on the existing row rather than inserting another obligation. Paid and refund-terminal records are never reset. Older appointments receive the same obligation through the repository fallback. The legacy `payment_link_created` label currently represents both a pre-Checkout obligation and a Checkout-ready payment; its naming is deferred technical debt.
+
 Amounts use integer minor units (`amountMinor`), never floating-point dollars. Current records support USD and the semantic `appointment_fee` purpose. Existing persisted statuses are retained: link created, processing, paid, failed, expired, refunded, partially refunded, and disputed. Provider IDs, checkout URLs, payment tokens, and raw errors are intentionally excluded.
 
 Identity is deterministic from organization, customer, appointment, and purpose. The same logical appointment fee has a stable identity while different organizations, appointments, or purposes do not collide.

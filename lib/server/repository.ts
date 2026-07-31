@@ -616,6 +616,7 @@ export const repository = {
       consented_at: new Date().toISOString()
     });
     const mappedAppointment = mapAppointment(appointment);
+    await repository.ensureAppointmentPaymentObligation(mappedAppointment);
     await scheduleAppointmentReminders(supabase, {
       organizationId,
       appointmentId: mappedAppointment.id,
@@ -635,6 +636,24 @@ export const repository = {
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data.map(mapAppointment);
+  },
+  async ensureAppointmentPaymentObligation(appointment: AppointmentRequest) {
+    if (!hasSupabaseServiceConfig()) return null;
+    if (!appointment.serviceId || appointment.servicePriceCentsSnapshot === null || !appointment.serviceCurrencySnapshot) {
+      throw new Error("Appointment service pricing snapshot is required for payment obligation creation.");
+    }
+    const supabase = getSupabaseAdmin();
+    const { data: existing, error: existingError } = await supabase.from("appointment_payments").select("*").eq("organization_id", appointment.organizationId).eq("appointment_request_id", appointment.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) return mapPayment(existing);
+    const { data, error } = await supabase.from("appointment_payments").insert({ organization_id: appointment.organizationId, appointment_request_id: appointment.id, service_id: appointment.serviceId, amount_cents: appointment.servicePriceCentsSnapshot, currency: appointment.serviceCurrencySnapshot.toLowerCase(), status: "payment_link_created", idempotency_key: `booking-payment-obligation-${appointment.id}` }).select().single();
+    if (error?.code === "23505") {
+      const { data: concurrent, error: concurrentError } = await supabase.from("appointment_payments").select("*").eq("organization_id", appointment.organizationId).eq("appointment_request_id", appointment.id).limit(1).single();
+      if (concurrentError) throw concurrentError;
+      return mapPayment(concurrent);
+    }
+    if (error) throw error;
+    return mapPayment(data);
   },
   async getAppointment(id: string) {
     if (!hasSupabaseServiceConfig()) return devStore.getAppointment(id);
@@ -1038,7 +1057,9 @@ export const repository = {
     if (!data) throw new Error("Only failed communications can be retried.");
     return data;
   },
-  async createPaymentLink(appointmentId: string) {
+  async createPaymentLink(appointmentId: string, dependencies: { createCheckoutSession?: typeof createStripeCheckoutSession; now?: () => Date } = {}) {
+    const createCheckoutSession = dependencies.createCheckoutSession ?? createStripeCheckoutSession;
+    const now = dependencies.now ?? (() => new Date());
     const appointment = await repository.getAppointment(appointmentId);
     if (!appointment) throw new Error("Appointment not found.");
     if (appointment.status === "confirmed" || appointment.status === "completed") {
@@ -1064,6 +1085,7 @@ export const repository = {
       throw new Error("Appointment already has a paid payment record.");
     }
 
+    const obligation = await repository.ensureAppointmentPaymentObligation(appointment);
     const { data: existingPayments, error: existingPaymentError } = await supabase
       .from("appointment_payments")
       .select("*")
@@ -1074,7 +1096,7 @@ export const repository = {
       .limit(1);
     if (existingPaymentError && existingPaymentError.code !== "PGRST205") throw existingPaymentError;
 
-    const existingPayment = existingPayments?.[0];
+    const existingPayment = existingPayments?.[0] ?? obligation;
     const settings = await loadOrganizationSettings();
     if (!appointment.serviceId || !appointment.serviceNameSnapshot) {
       throw new Error("Appointment service must be assigned before payment approval.");
@@ -1095,7 +1117,7 @@ export const repository = {
     }
 
     const lineItem = calculateAppointmentCheckoutLineItem(appointment);
-    const expiresAt = calculatePaymentExpiration(new Date(), appointment.preferredDate, settings.rules);
+    const expiresAt = calculatePaymentExpiration(now(), appointment.preferredDate, settings.rules);
     const idempotencyKey = `payment-link-${appointment.id}-${randomUUID()}`;
     const env = getServerEnv();
     const siteUrl = env.NEXT_PUBLIC_SITE_URL;
@@ -1104,7 +1126,7 @@ export const repository = {
     let paymentIntentId: string | null = null;
 
     if (env.STRIPE_SECRET_KEY) {
-      const session = await createStripeCheckoutSession({
+      const session = await createCheckoutSession({
         apiKey: env.STRIPE_SECRET_KEY,
         idempotencyKey,
         successUrl: `${siteUrl}/booking/confirmation?payment=success`,
@@ -1119,9 +1141,7 @@ export const repository = {
       paymentIntentId = session.payment_intent ?? null;
     }
 
-    const { data: payment, error: paymentError } = await supabase
-      .from("appointment_payments")
-      .insert({
+    const checkoutUpdate = {
         organization_id: organizationId,
         appointment_request_id: appointment.id,
         service_id: appointment.serviceId,
@@ -1133,9 +1153,10 @@ export const repository = {
         checkout_url: checkoutUrl,
         expires_at: expiresAt.toISOString(),
         idempotency_key: idempotencyKey
-      })
-      .select()
-      .single();
+      };
+    const { data: payment, error: paymentError } = existingPayment
+      ? await supabase.from("appointment_payments").update(checkoutUpdate).eq("id", existingPayment.id).eq("organization_id", organizationId).select().single()
+      : await supabase.from("appointment_payments").insert(checkoutUpdate).select().single();
     if (paymentError) throw paymentError;
 
     await supabase.from("slot_reservations").insert({
@@ -1182,8 +1203,8 @@ export const repository = {
   async confirmPaymentFromStripe(input: { providerEventId: string; eventType: string; checkoutSessionId?: string; paymentIntentId?: string }) {
     if (!hasSupabaseServiceConfig()) throw new Error("Stripe webhooks require Supabase-backed storage.");
     const supabase = getSupabaseAdmin();
-    const existing = await supabase.from("payment_events").select("id").eq("provider", "stripe").eq("provider_event_id", input.providerEventId).maybeSingle();
-    if (existing.data) return { duplicate: true };
+    const existing = await supabase.from("payment_events").select("id,processing_status").eq("provider", "stripe").eq("provider_event_id", input.providerEventId).maybeSingle();
+    if (existing.data && existing.data.processing_status !== "failed") return { duplicate: true };
 
     const paymentQuery = input.checkoutSessionId
       ? supabase.from("appointment_payments").select("*").eq("stripe_checkout_session_id", input.checkoutSessionId).maybeSingle()
@@ -1204,17 +1225,21 @@ export const repository = {
     }
 
     const organizationId = String(payment.organization_id);
-    await supabase.from("payment_events").insert({
-      organization_id: organizationId,
-      payment_id: payment.id,
-      provider: "stripe",
-      provider_event_id: input.providerEventId,
-      event_type: input.eventType,
-      processing_status: "processed",
-      processed_at: new Date().toISOString(),
-      safe_summary: "Payment event processed."
-    });
+    if (existing.data) {
+      await supabase.from("payment_events").update({ processing_status: "received", processed_at: null, safe_summary: "Payment event retrying." }).eq("id", existing.data.id);
+    } else {
+      await supabase.from("payment_events").insert({
+        organization_id: organizationId,
+        payment_id: payment.id,
+        provider: "stripe",
+        provider_event_id: input.providerEventId,
+        event_type: input.eventType,
+        processing_status: "received",
+        safe_summary: "Payment event received."
+      });
+    }
 
+    try {
     const { data: appointmentRow, error: appointmentError } = await supabase
       .from("appointment_requests")
       .select("*, customers(*)")
@@ -1251,7 +1276,12 @@ export const repository = {
       entity_id: payment.id,
       metadata: { eventType: input.eventType }
     });
+    await supabase.from("payment_events").update({ processing_status: "processed", processed_at: new Date().toISOString(), safe_summary: "Payment event processed." }).eq("provider", "stripe").eq("provider_event_id", input.providerEventId);
     return { confirmed: true };
+    } catch (error) {
+      await supabase.from("payment_events").update({ processing_status: "failed", safe_summary: "Payment event processing failed." }).eq("provider", "stripe").eq("provider_event_id", input.providerEventId);
+      throw error;
+    }
   },
   async getCustomerAppointmentByAccessToken(token: string): Promise<CustomerAppointmentStatus | null> {
     if (!hasSupabaseServiceConfig()) return null;

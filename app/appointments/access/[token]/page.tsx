@@ -1,5 +1,6 @@
 import { ButtonLink } from "@/components/button";
 import { ClientPortalHome } from "@/components/client-portal/client-portal-home";
+import { ClientPaymentCard } from "@/components/client-portal/client-payment-card";
 import { PublicShell } from "@/components/public-shell";
 import { queryClientPortal } from "@/lib/server/client-portal";
 import type { Metadata } from "next";
@@ -28,7 +29,7 @@ export default async function AppointmentAccessPage({ params }: { params: Promis
 
   return (
     <PublicShell>
-      <ClientPortalHome portal={portal} />
+      <ClientPortalHome portal={portal} paymentCard={<ClientPaymentCard token={token} payment={portal.payment} />} />
     </PublicShell>
   );
 }
