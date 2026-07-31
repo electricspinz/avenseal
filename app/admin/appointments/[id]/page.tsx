@@ -9,6 +9,9 @@ import { parseTimelineFilters, queryAppointmentTimeline } from "@/lib/server/tim
 import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
 import { ExternalSessionCard } from "@/components/external-session-card";
 import { ClientWorkspaceAccessCard } from "@/components/client-workspace-access-card";
+import { AdminAppointmentDocumentsCard } from "@/components/admin-appointment-documents-card";
+import { createAppointmentDocumentRepository } from "@/lib/server/document-repository";
+import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +28,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
   const timeline = await queryAppointmentTimeline({ organizationId: appointment.organizationId, appointmentId: appointment.id, category: filters.category, outcome: filters.outcome });
   const externalSession = await repository.getExternalSession(appointment.organizationId, appointment.id);
   const clientAccess = await repository.getClientWorkspaceAccessMetadata(appointment.organizationId, appointment.id);
+  const documents = hasSupabaseServiceConfig() ? await createAppointmentDocumentRepository(getSupabaseAdmin()).listAppointmentDocuments(appointment.organizationId, appointment.id) : [];
 
   return (
     <AdminShell active="Appointments">
@@ -141,6 +145,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
             </div>
           </AdminCard>
           <ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />
+          <AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents} />
           <ClientWorkspaceAccessCard appointmentId={appointment.id} initial={clientAccess} />
         </div>
         <AdminCard>

@@ -18,7 +18,7 @@ describe("Client Portal foundation", () => {
   it("uses payment before preparation and distinguishes unavailable domains", () => {
     const portal = projectPortal(status);
     expect(portal.nextStep.title).toBe("Complete payment");
-    expect(portal.documents.availability).toBe("unavailable");
+    expect(portal.documents.availability).toBe("available");
     expect(portal.workflow.availability).toBe("unavailable");
     expect(portal.checklist.find((item) => item.id === "payment")?.state).toBe("current");
   });

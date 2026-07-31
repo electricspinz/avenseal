@@ -4,6 +4,8 @@ export type EmailTemplateType =
   | "payment_required"
   | "payment_confirmed"
   | "external_session_available"
+  | "document_replacement_requested"
+  | "documents_approved"
   | "payment_expiring_soon"
   | "payment_window_expired"
   | "appointment_rescheduled"
@@ -20,6 +22,8 @@ export function renderEmailSubject(type: EmailTemplateType, businessName = "Aven
     payment_required: `${businessName}: payment required to confirm your appointment`,
     payment_confirmed: `${businessName}: appointment confirmed`,
     external_session_available: "Your BlueNotary session is ready",
+    document_replacement_requested: "A document needs to be replaced",
+    documents_approved: "Your uploaded documents have been approved",
     payment_expiring_soon: `${businessName}: payment link expiring soon`,
     payment_window_expired: `${businessName}: payment window expired`,
     appointment_rescheduled: `${businessName}: appointment updated`,

@@ -438,7 +438,7 @@ function paymentEmailHtml(input: {
   `;
 }
 
-async function createAppointmentAccessLink(appointment: AppointmentRequest, reason: string) {
+export async function createAppointmentAccessLink(appointment: AppointmentRequest, reason: string) {
   if (!hasSupabaseServiceConfig()) return null;
   const organizationId = appointment.organizationId;
   const token = generateAppointmentAccessToken();
