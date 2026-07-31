@@ -11,7 +11,7 @@ export type ClientPortalViewModel = Readonly<{
   appointment: Readonly<{ reference: string; status: string; statusLabel: string; date: string; time: string; timezone: string; serviceName: string; businessName: string; supportEmail: string; supportPhone: string; meetingUrl: string | null }>;
   workflow: Readonly<{ availability: PortalAvailability; stage: string | null; blockers: readonly string[]; nextAction: string | null; progressPercent: number | null; reason?: string }>;
   documents: Readonly<{ availability: PortalAvailability; items: readonly Readonly<{ name: string; status: string }> []; reason?: string }>;
-  payment: Readonly<{ availability: PortalAvailability; status: PaymentStatus | null; label: string; reason?: string }>;
+  payment: Readonly<{ availability: PortalAvailability; status: PaymentStatus | null; label: string; amountDueCents: number | null; currency: string; reason?: string }>;
   communications: Readonly<{ availability: PortalAvailability; items: readonly Readonly<{ title: string; occurredAt: string | null }> []; reason?: string }>;
   externalSession: Readonly<{ availability: PortalAvailability; provider: string | null; sessionName: string | null; launchUrl: string | null; status: string | null }>;
   checklist: readonly Readonly<{ id: string; label: string; state: PortalItemState; detail: string }> [];
@@ -36,7 +36,7 @@ export function projectPortal(status: CustomerAppointmentStatus, externalSession
     appointment: { reference: status.reference, status: status.status, statusLabel: status.customerStatusLabel, date: status.preferredDate, time: status.preferredTime, timezone: status.timezone, serviceName: status.serviceName, businessName: status.businessName, supportEmail: status.businessEmail, supportPhone: status.businessPhone, meetingUrl: status.meetingUrl },
     workflow: { availability: "unavailable", stage: null, blockers: [], nextAction: null, progressPercent: null, reason: "The current secure appointment link does not yet expose a tenant-scoped Workflow Engine read model." },
     documents: { availability: "unavailable", items: [], reason: "The current secure appointment link does not yet expose document records." },
-    payment: paymentAvailable ? { availability: "available", status: status.paymentStatus, label: paymentLabel(status.paymentStatus) } : { availability: "unavailable", status: null, label: "Unavailable", reason: "No payment record is available for this appointment." },
+    payment: paymentAvailable ? { availability: "available", status: status.paymentStatus, label: paymentLabel(status.paymentStatus), amountDueCents: status.amountDueCents, currency: status.currency } : { availability: "unavailable", status: null, label: "Unavailable", amountDueCents: null, currency: status.currency, reason: "No payment record is available for this appointment." },
     communications: { availability: "unavailable", items: [], reason: "Communication history is not available through the current secure appointment link." },
     externalSession: session,
     checklist,
