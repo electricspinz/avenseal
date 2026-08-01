@@ -6,6 +6,12 @@ Avenseal is a Next.js application backed by Supabase and external provider adapt
 
 - **Organizations and tenancy:** `organization_id`, memberships, server authorization, and RLS isolate business data.
 - **Authentication and authorization:** admin sessions and organization roles gate administrative operations.
+
+## Admin authorization boundary
+
+Administrative mutations require a signed, unexpired session and the server-side `requireAdminOrganizationContext()` boundary. Middleware performs coarse cookie integrity and expiry checks; route handlers revalidate the current active owner/admin membership, establish the trusted organization context, and verify that an appointment target belongs to that organization before mutation. Invalid or expired sessions fail as unauthenticated; inactive or insufficient memberships fail closed; unknown or wrong-tenant appointment targets use a non-disclosing response.
+
+Admin cookies are HttpOnly, Secure in production, SameSite=Lax, path-scoped to `/`, and expire after eight hours. The signed payload expiry is authoritative in addition to the browser cookie expiry. Logout clears the browser cookie; server-side per-session revocation is not currently implemented. CSRF origin policy is intentionally deferred to Sprint 26.1C.
 - **Services and appointments:** services define bookable offerings; appointments preserve booking-time snapshots where available.
 - **Availability:** server-side, timezone-safe availability combines configuration, appointments, reservations, and Calendar busy data.
 - **Payments:** Stripe Checkout and webhook-driven payment state remain separate from appointment status.

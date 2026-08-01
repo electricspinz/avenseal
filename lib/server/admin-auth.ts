@@ -17,10 +17,14 @@ export type AdminSessionPayload = {
   email: string;
   userId?: string;
   issuedAt: number;
+  expiresAt: number;
 };
 
+export const adminSessionDurationMilliseconds = 8 * 60 * 60 * 1000;
+
 export function signAdminSession(email: string, userId?: string) {
-  const payload = Buffer.from(JSON.stringify({ email, userId, issuedAt: Date.now() })).toString("base64url");
+  const issuedAt = Date.now();
+  const payload = Buffer.from(JSON.stringify({ email, userId, issuedAt, expiresAt: issuedAt + adminSessionDurationMilliseconds })).toString("base64url");
   const signature = createHmac("sha256", getSecret()).update(payload).digest("base64url");
   return `${payload}.${signature}`;
 }
@@ -30,8 +34,9 @@ export function readAdminSession(token?: string): AdminSessionPayload | null {
   const [payload] = token!.split(".");
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<AdminSessionPayload>;
-    if (!parsed.email || typeof parsed.email !== "string" || typeof parsed.issuedAt !== "number") return null;
-    return { email: parsed.email, userId: typeof parsed.userId === "string" ? parsed.userId : undefined, issuedAt: parsed.issuedAt };
+    if (!parsed.email || typeof parsed.email !== "string" || typeof parsed.issuedAt !== "number" || typeof parsed.expiresAt !== "number") return null;
+    if (!Number.isSafeInteger(parsed.issuedAt) || !Number.isSafeInteger(parsed.expiresAt) || parsed.expiresAt <= Date.now() || parsed.issuedAt > Date.now() + 5 * 60 * 1000 || parsed.expiresAt <= parsed.issuedAt) return null;
+    return { email: parsed.email, userId: typeof parsed.userId === "string" ? parsed.userId : undefined, issuedAt: parsed.issuedAt, expiresAt: parsed.expiresAt };
   } catch {
     return null;
   }

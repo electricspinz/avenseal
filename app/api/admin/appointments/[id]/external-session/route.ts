@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { externalSessionInputSchema } from "@/lib/server/external-sessions";
 import { repository } from "@/lib/server/repository";
+import { requireAdminOrganizationContext } from "@/lib/server/admin-context";
 
-async function appointmentForRequest(id: string) { return repository.getAppointment(id); }
+async function appointmentForRequest(id: string) { const context = await requireAdminOrganizationContext(); const appointment = await repository.getAppointment(id); return appointment?.organizationId === context.organizationId ? appointment : null; }
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) { const { id } = await params; const appointment = await appointmentForRequest(id); if (!appointment) return NextResponse.json({ error: "Appointment not found." }, { status: 404 }); const parsed = externalSessionInputSchema.safeParse(await request.json()); if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid external session." }, { status: 400 }); return NextResponse.json({ session: await repository.saveExternalSession(appointment.organizationId, appointment.id, parsed.data) }, { status: 201 }); }
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) { return POST(request, context); }
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) { const { id } = await params; const appointment = await appointmentForRequest(id); if (!appointment) return NextResponse.json({ error: "Appointment not found." }, { status: 404 }); if (!await repository.getExternalSession(appointment.organizationId, appointment.id)) return NextResponse.json({ error: "External session not found." }, { status: 404 }); await repository.removeExternalSession(appointment.organizationId, appointment.id); return new NextResponse(null, { status: 204 }); }

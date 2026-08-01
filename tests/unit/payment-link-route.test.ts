@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createPaymentLink: vi.fn(),
-  getAppointment: vi.fn()
+  getAppointment: vi.fn(),
+  requireAdminOrganizationContext: vi.fn()
 }));
 
 vi.mock("@/lib/server/repository", () => ({
   repository: { createPaymentLink: mocks.createPaymentLink, getAppointment: mocks.getAppointment }
+}));
+
+vi.mock("@/lib/server/admin-context", () => ({
+  requireAdminOrganizationContext: mocks.requireAdminOrganizationContext
 }));
 
 import { POST } from "@/app/api/admin/appointments/[id]/payment-link/route";
@@ -14,7 +19,8 @@ import { POST } from "@/app/api/admin/appointments/[id]/payment-link/route";
 describe("payment-link delivery response", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.getAppointment.mockResolvedValue({ customer: { email: "customer@example.com" } });
+    mocks.requireAdminOrganizationContext.mockResolvedValue({ userId: "admin-1", email: "admin@example.com", organizationId: "org-1", role: "admin" });
+    mocks.getAppointment.mockResolvedValue({ id: "appointment-1", organizationId: "org-1", customer: { email: "customer@example.com" } });
   });
 
   it("returns the payment link when email delivery fails", async () => {
