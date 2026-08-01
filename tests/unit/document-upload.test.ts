@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadCustomerAppointmentDocument } from "@/lib/server/document-upload";
 
-function uploadClient(metadataFails = false, replacement = false) {
+function uploadClient(metadataFails = false, replacement = false, enqueueFails = false) {
   const inserts: Array<{ table: string; value: Record<string, unknown> }> = [];
   const events: string[] = [];
   const client = {
+    rpc(name: string) {
+      if (name === "enqueue_document_scan_job") return Promise.resolve({ data: enqueueFails ? null : "scan-job-1", error: enqueueFails ? new Error("queue private error") : null });
+      return Promise.resolve({ data: null, error: null });
+    },
     from(table: string) {
       let operation = "select";
       let value: Record<string, unknown> | undefined;
@@ -44,6 +48,7 @@ describe("customer appointment document upload", () => {
     expect(result).not.toHaveProperty("sizeBytes");
     expect(result).not.toHaveProperty("storageKey");
     expect(result).not.toHaveProperty("organizationId");
+    expect(result).not.toHaveProperty("jobId");
     expect(JSON.stringify(result)).not.toContain("quarantine/");
     expect(state.inserts.map((entry) => entry.table)).toEqual(["appointment_document_files", "audit_logs", "audit_logs"]);
     expect(state.inserts.filter((entry) => entry.table === "audit_logs").map((entry) => entry.value.action)).toEqual(["document.uploaded", "document.scan_pending"]);
@@ -59,6 +64,15 @@ describe("customer appointment document upload", () => {
     expect(storage.remove).toHaveBeenCalledOnce();
     expect(storage.remove.mock.calls[0][0]).toMatch(/^quarantine\/organizations\/org-1\/appointments\/appointment-1\/[0-9a-f-]+$/);
     expect(state.inserts.filter((entry) => entry.table === "audit_logs")).toEqual([]);
+  });
+
+  it("leaves a successfully persisted document quarantined when scan-job enqueue fails", async () => {
+    const state = uploadClient(false, false, true);
+    const storage = { upload: vi.fn().mockResolvedValue(undefined), download: vi.fn(), remove: vi.fn().mockResolvedValue(undefined) };
+    await expect(uploadCustomerAppointmentDocument({ organizationId: "org-1", appointmentId: "appointment-1", file: uploadFile(), storage, supabase: state.client })).rejects.toThrow("processing could not be scheduled");
+    expect(storage.remove).not.toHaveBeenCalled();
+    expect(state.inserts.filter((entry) => entry.table === "appointment_document_files")[0]?.value).toMatchObject({ scan_status: "pending", storage_status: "quarantined" });
+    expect(state.inserts.filter((entry) => entry.table === "audit_logs").map((entry) => entry.value.action)).toEqual(["document.uploaded", "document.scan_pending", "document.scan_enqueue_failed"]);
   });
 
   it("rejects invalid file metadata before object storage receives bytes", async () => {

@@ -15,7 +15,7 @@ export const documentMetadataCreationDefaults = {
   storage_status: "quarantined",
   scan_attempt_count: 0
 } as const;
-export const documentScanFailureCategories = ["provider_unavailable", "provider_timeout", "transient_error", "invalid_response"] as const;
+export const documentScanFailureCategories = ["configuration_error", "provider_unavailable", "provider_timeout", "provider_rate_limited", "transient_error", "invalid_response", "authentication_failed", "provider_rejected", "network_error", "unexpected_error"] as const;
 export type DocumentScanFailureCategory = (typeof documentScanFailureCategories)[number];
 export const documentScanBlockedCategories = ["policy_blocked", "suspicious_content"] as const;
 export type DocumentScanBlockedCategory = (typeof documentScanBlockedCategories)[number];

@@ -43,6 +43,12 @@ Document review outcomes can queue `document_replacement_requested` for a newly 
 ## Current limitations and future work
 
 The Client Workspace card supports one selected file at a time with idle, uploading, completed, and safe failure states. Customers cannot download files, see internal review metadata, access version history, preview documents, or receive review communications. There is no customer deletion, sharing, or multiple-upload queue. No BlueNotary API integration is part of this foundation.
+
+## Scan queue and clean activation
+
+Each successful pending/quarantined metadata write now attempts a tenant-scoped, idempotent document scan-job enqueue. The job queue and processor are server-only; customers receive no job ID, provider data, storage information, or scan response. If enqueue fails, the document and its private quarantine object remain pending/quarantined for operational recovery and the upload returns a safe processing failure. The upload request never invokes a scanner synchronously.
+
+The protected processor claims due jobs atomically with a five-minute lease, reclaims expired claims, and rechecks tenant, appointment, document, non-deleted, pending, and quarantined state before downloading trusted private bytes. It retries transient failures at 1 minute, 5 minutes, 15 minutes, 1 hour, and 6 hours, up to five attempts. Clean results perform the existing guarded scan transition and clean-only storage activation; blocked and failed results remain quarantined. The configured Cloudmersive adapter remains deliberately fail-closed pending approved result-contract, privacy, and staging verification, so production launch remains blocked.
 # Security scan-state foundation
 
 Sprint 26.1D-B1.1 keeps review status (`uploaded`, `approved`, `rejected`) separate from security scan state. It adds durable `scan_status` (`pending`, `clean`, `infected`, `suspicious`, `failed`) and `storage_status` (`quarantined`, `active`, `removed`) fields. New and existing rows conservatively default to `pending` and `quarantined`; no historical file is silently trusted.
