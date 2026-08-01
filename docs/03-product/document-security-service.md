@@ -146,6 +146,8 @@ Use **five total attempts** (initial + four retries), with full jitter around ba
 | Infected or suspicious | `infected` / `suspicious` | block; no automatic retry | terminal blocked result, quarantined. |
 | Scanner misconfigured/disabled | no adapter call | fail job safely and alert | `failed`, quarantined. |
 
+Private-storage uncertainty is always retryable and fail-closed: download exceptions, missing or non-`ArrayBuffer` objects, empty objects, oversized objects, malformed bytes, and declared-content-type signature mismatches never reach a scanner. They remain pending and quarantined while retries remain, then become failed and quarantined at exhaustion. Avenseal does not infer a permanent “not found” outcome from untyped storage-provider text.
+
 Manual retry is limited to an authorized operation after configuration/incident review; it calls the existing retry reset, creates/reuses a job, and preserves attempt history. There is no automatic retry for infected, suspicious, or permanent rejections. A manual clean override is **high risk and not recommended for launch**.
 
 ## Processing flows

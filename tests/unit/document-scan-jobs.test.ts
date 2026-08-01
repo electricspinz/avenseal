@@ -65,4 +65,73 @@ describe("document scan job store", () => {
     expect(filters).toContainEqual(["claimed_by", "worker-original"]);
     expect(audits).toEqual([]);
   });
+
+  it("does not let a stale worker complete a claimed job", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const updateChain = { eq: (field: string, value: unknown) => { filters.push([field, value]); return updateChain; }, select: () => updateChain, maybeSingle: async () => ({ data: null, error: null }) };
+    const supabase = { from: () => ({ update: () => updateChain }) } as never;
+    const job = { id: "job-1", organizationId: "org-1", appointmentId: "appointment-1", documentId: "document-1", status: "claimed" as const, attemptCount: 1, nextAttemptAt: "2026-08-01T00:00:00.000Z", claimedAt: "2026-08-01T00:00:00.000Z", claimExpiresAt: "2026-08-01T00:05:00.000Z", claimedBy: "worker-original", lastFailureCategory: null, provider: null, providerRequestId: null, scanDurationMs: null, completedAt: null };
+    await expect(createDocumentScanJobStore(supabase).complete(job, { outcome: "clean", provider: "fake" })).resolves.toBeNull();
+    expect(filters).toContainEqual(["claimed_by", "worker-original"]);
+  });
+
+  it("does not let a stale worker block a claimed job or write its audit", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const audits: unknown[] = [];
+    const updateChain = { eq: (field: string, value: unknown) => { filters.push([field, value]); return updateChain; }, select: () => updateChain, maybeSingle: async () => ({ data: null, error: null }) };
+    const supabase = { from: (table: string) => table === "document_scan_jobs" ? { update: () => updateChain } : { insert: (value: unknown) => { audits.push(value); return Promise.resolve({ error: null }); } } } as never;
+    const job = { id: "job-1", organizationId: "org-1", appointmentId: "appointment-1", documentId: "document-1", status: "claimed" as const, attemptCount: 1, nextAttemptAt: "2026-08-01T00:00:00.000Z", claimedAt: "2026-08-01T00:00:00.000Z", claimExpiresAt: "2026-08-01T00:05:00.000Z", claimedBy: "worker-original", lastFailureCategory: null, provider: null, providerRequestId: null, scanDurationMs: null, completedAt: null };
+
+    await expect(createDocumentScanJobStore(supabase).block(job, { outcome: "infected", provider: "fake" })).resolves.toBe(false);
+
+    expect(filters).toContainEqual(["claimed_by", "worker-original"]);
+    expect(audits).toEqual([]);
+  });
+
+  it("does not let a stale worker fail a claimed job or write its audit", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const audits: unknown[] = [];
+    const updateChain = { eq: (field: string, value: unknown) => { filters.push([field, value]); return updateChain; }, select: () => updateChain, maybeSingle: async () => ({ data: null, error: null }) };
+    const supabase = { from: (table: string) => table === "document_scan_jobs" ? { update: () => updateChain } : { insert: (value: unknown) => { audits.push(value); return Promise.resolve({ error: null }); } } } as never;
+    const job = { id: "job-1", organizationId: "org-1", appointmentId: "appointment-1", documentId: "document-1", status: "claimed" as const, attemptCount: 1, nextAttemptAt: "2026-08-01T00:00:00.000Z", claimedAt: "2026-08-01T00:00:00.000Z", claimExpiresAt: "2026-08-01T00:05:00.000Z", claimedBy: "worker-original", lastFailureCategory: null, provider: null, providerRequestId: null, scanDurationMs: null, completedAt: null };
+
+    await expect(createDocumentScanJobStore(supabase).fail(job, { outcome: "permanent_failure", provider: "fake", safeFailureCategory: "provider_rejected" })).resolves.toBe(false);
+
+    expect(filters).toContainEqual(["claimed_by", "worker-original"]);
+    expect(audits).toEqual([]);
+  });
+
+  it("prevents worker A from mutating a retry job reclaimed by worker B after its lease expires", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const audits: unknown[] = [];
+    let leaseExpired = false;
+    const row = (claimedBy: string, attemptCount: number) => ({ id: "job-1", organization_id: "org-1", appointment_request_id: "appointment-1", document_id: "document-1", status: "claimed", attempt_count: attemptCount, next_attempt_at: "2026-08-01T00:00:00.000Z", claimed_at: "2026-08-01T00:00:00.000Z", claim_expires_at: "2026-08-01T00:05:00.000Z", claimed_by: claimedBy, last_failure_category: "provider_unavailable", provider: "fake", provider_request_id: null, scan_duration_ms: null, completed_at: null });
+    const updateChain = { eq: (field: string, value: unknown) => { filters.push([field, value]); return updateChain; }, select: () => updateChain, maybeSingle: async () => ({ data: null, error: null }) };
+    const supabase = {
+      rpc: async (name: string, args: { p_claimed_by: string }) => {
+        expect(name).toBe("claim_document_scan_jobs");
+        if (args.p_claimed_by === "worker-a") return { data: [row("worker-a", 2)], error: null };
+        expect(leaseExpired).toBe(true);
+        expect(args.p_claimed_by).toBe("worker-b");
+        return { data: [row("worker-b", 3)], error: null };
+      },
+      from: (table: string) => table === "document_scan_jobs" ? { update: () => updateChain } : { insert: (value: unknown) => { audits.push(value); return Promise.resolve({ error: null }); } }
+    } as never;
+    const store = createDocumentScanJobStore(supabase);
+    const [workerAJob] = await store.claim({ claimedBy: "worker-a" });
+    leaseExpired = true;
+    const [workerBJob] = await store.claim({ claimedBy: "worker-b" });
+
+    expect(workerAJob).toMatchObject({ status: "claimed", claimedBy: "worker-a", attemptCount: 2 });
+    expect(workerBJob).toMatchObject({ status: "claimed", claimedBy: "worker-b", attemptCount: 3 });
+    await expect(store.scheduleRetry(workerAJob, { outcome: "retryable_failure", provider: "fake", safeFailureCategory: "provider_unavailable" }, new Date("2026-08-01T00:00:00.000Z"))).resolves.toBe(false);
+    await expect(store.complete(workerAJob, { outcome: "clean", provider: "fake" })).resolves.toBeNull();
+    await expect(store.block(workerAJob, { outcome: "infected", provider: "fake" })).resolves.toBe(false);
+    await expect(store.fail(workerAJob, { outcome: "permanent_failure", provider: "fake", safeFailureCategory: "provider_rejected" })).resolves.toBe(false);
+    await expect(store.cancel(workerAJob)).resolves.toBe(false);
+
+    expect(filters.filter(([field, value]) => field === "claimed_by" && value === "worker-a")).toHaveLength(5);
+    expect(audits).toEqual([]);
+    expect(workerBJob).toMatchObject({ status: "claimed", claimedBy: "worker-b", attemptCount: 3 });
+  });
 });

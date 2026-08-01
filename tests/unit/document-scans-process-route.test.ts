@@ -32,4 +32,29 @@ describe("document scan processor route", () => {
     expect(mocks.process).toHaveBeenCalledWith({}, { batchSize: 20 });
     await expect(response.json()).resolves.toEqual({ result: { claimed: 1, completed: 1, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 } });
   });
+
+  it("returns a safe all-zero aggregate for a valid invocation with no due jobs", async () => {
+    mocks.process.mockResolvedValue({ claimed: 0, completed: 0, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 });
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST", headers: { authorization: "Bearer scan-worker-secret" } }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual({ result: { claimed: 0, completed: 0, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 } });
+    expect(JSON.stringify(body)).not.toMatch(/job|document|appointment|organization|storage|provider|token|error/i);
+  });
+
+  it("returns only aggregate counters when safely contained mixed work has partial failures", async () => {
+    mocks.process.mockResolvedValue({ claimed: 10, completed: 3, blocked: 2, retryScheduled: 1, failed: 2, cancelled: 1 });
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST", headers: { authorization: "Bearer scan-worker-secret" } }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body).toEqual({ result: { claimed: 10, completed: 3, blocked: 2, retryScheduled: 1, failed: 2, cancelled: 1 } });
+    expect(Object.keys(body.result).sort()).toEqual(["blocked", "cancelled", "claimed", "completed", "failed", "retryScheduled"]);
+    expect(JSON.stringify(body)).not.toMatch(/job-|document-|appointment-|organization-|storage-|provider_request|stack|scanner|token|error/i);
+  });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { appointmentDocumentStorage, createSupabaseAppointmentDocumentStorage, type AppointmentDocumentObjectStorage } from "@/lib/server/document-storage";
+import { appointmentDocumentStorage, createSupabaseAppointmentDocumentStorage, validateAppointmentDocumentSignature, type AppointmentDocumentObjectStorage } from "@/lib/server/document-storage";
 import { createAppointmentDocumentRepository } from "@/lib/server/document-repository";
 import { createDocumentMalwareScanner, type DocumentScanFailureCategory, type DocumentScanResult, type MalwareScanner } from "@/lib/server/document-security/scanner";
 
@@ -141,14 +141,15 @@ export async function processDocumentScanBatch(supabase: SupabaseClient, options
         continue;
       }
     }
-    if (document.scanStatus === "infected" || document.scanStatus === "suspicious") { await store.block(job, { outcome: document.scanStatus, provider: document.scanProvider ?? "replay" }); await onStage({ stage: "after_job_blocked", attemptCount: job.attemptCount, outcome: document.scanStatus }); result.blocked++; continue; }
+    if (document.scanStatus === "infected" || document.scanStatus === "suspicious") { if (await store.block(job, { outcome: document.scanStatus, provider: document.scanProvider ?? "replay" })) { await onStage({ stage: "after_job_blocked", attemptCount: job.attemptCount, outcome: document.scanStatus }); result.blocked++; } continue; }
     if (document.scanStatus === "failed" && document.storageStatus === "quarantined") { if (await store.fail(job, { outcome: "permanent_failure", provider: document.scanProvider ?? "replay", safeFailureCategory: (document.scanFailureCategory as DocumentScanFailureCategory | null) ?? "unexpected_error" })) { await onStage({ stage: "after_job_failed", attemptCount: job.attemptCount, outcome: "permanent_failure" }); result.failed++; } continue; }
     if (document.scanStatus !== "pending" || document.storageStatus !== "quarantined") { await store.cancel(job); result.cancelled++; continue; }
     let scan: DocumentScanResult;
     try {
       const bytes = await storage.download(document.storageKey);
       await onStage({ stage: "after_storage_fetch", attemptCount: job.attemptCount });
-      if (bytes.byteLength > appointmentDocumentStorage.maximumSizeBytes) throw new Error("Document storage object exceeds the configured size.");
+      if (!(bytes instanceof ArrayBuffer) || bytes.byteLength === 0 || bytes.byteLength > appointmentDocumentStorage.maximumSizeBytes) throw new Error("Document storage object is invalid.");
+      validateAppointmentDocumentSignature(document.contentType, bytes);
       const started = now().getTime();
       scan = await scanner.scan({ documentId: document.id, contentType: document.contentType, sizeBytes: document.sizeBytes, bytes: new Uint8Array(bytes), correlationId: job.id });
       scan = { ...scan, durationMs: scan.durationMs ?? now().getTime() - started };
@@ -160,13 +161,16 @@ export async function processDocumentScanBatch(supabase: SupabaseClient, options
       try { await repository.markDocumentScanClean({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", provider: scan.provider, now: now() }); }
       catch { if (await store.scheduleRetry(job, { outcome: "retryable_failure", provider: scan.provider, safeFailureCategory: "provider_unavailable" }, now(), random)) { await onStage({ stage: "after_retry_scheduled", attemptCount: job.attemptCount, outcome: "retryable_failure" }); result.retryScheduled++; } continue; }
       await onStage({ stage: "after_scan_clean_transition", attemptCount: job.attemptCount, outcome: scan.outcome });
-      try { await repository.activateCleanDocument({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", now: now() }); await onStage({ stage: "after_storage_activation", attemptCount: job.attemptCount, outcome: scan.outcome }); await store.complete(job, scan); await onStage({ stage: "after_job_completed", attemptCount: job.attemptCount, outcome: scan.outcome }); result.completed++; }
+      try { await repository.activateCleanDocument({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", now: now() }); }
+      catch { if (await store.scheduleRetry(job, { outcome: "retryable_failure", provider: scan.provider, safeFailureCategory: "provider_unavailable" }, now(), random)) { await onStage({ stage: "after_retry_scheduled", attemptCount: job.attemptCount, outcome: "retryable_failure" }); result.retryScheduled++; } continue; }
+      await onStage({ stage: "after_storage_activation", attemptCount: job.attemptCount, outcome: scan.outcome });
+      try { if (await store.complete(job, scan)) { await onStage({ stage: "after_job_completed", attemptCount: job.attemptCount, outcome: scan.outcome }); result.completed++; } }
       catch { if (await store.scheduleRetry(job, { outcome: "retryable_failure", provider: scan.provider, safeFailureCategory: "provider_unavailable" }, now(), random)) { await onStage({ stage: "after_retry_scheduled", attemptCount: job.attemptCount, outcome: "retryable_failure" }); result.retryScheduled++; } }
       continue;
     }
-    if (scan.outcome === "infected" || scan.outcome === "suspicious") { await repository.markDocumentScanBlocked({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", result: scan.outcome, provider: scan.provider, category: scan.outcome === "infected" ? "policy_blocked" : "suspicious_content", now: now() }); await onStage({ stage: "after_scan_blocked_transition", attemptCount: job.attemptCount, outcome: scan.outcome }); await store.block(job, scan); await onStage({ stage: "after_job_blocked", attemptCount: job.attemptCount, outcome: scan.outcome }); result.blocked++; continue; }
+    if (scan.outcome === "infected" || scan.outcome === "suspicious") { await repository.markDocumentScanBlocked({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", result: scan.outcome, provider: scan.provider, category: scan.outcome === "infected" ? "policy_blocked" : "suspicious_content", now: now() }); await onStage({ stage: "after_scan_blocked_transition", attemptCount: job.attemptCount, outcome: scan.outcome }); if (await store.block(job, scan)) { await onStage({ stage: "after_job_blocked", attemptCount: job.attemptCount, outcome: scan.outcome }); result.blocked++; } continue; }
     const terminal = scan.outcome === "permanent_failure" || job.attemptCount >= documentScanMaximumAttempts;
-    if (terminal) { await repository.markDocumentScanFailed({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", provider: scan.provider, category: safeCategory(scan), now: now() }); await onStage({ stage: "after_scan_failed_transition", attemptCount: job.attemptCount, outcome: scan.outcome }); await store.fail(job, scan); await onStage({ stage: "after_job_failed", attemptCount: job.attemptCount, outcome: scan.outcome }); result.failed++; }
+    if (terminal) { await repository.markDocumentScanFailed({ organizationId: job.organizationId, appointmentId: job.appointmentId, documentId: job.documentId, actorType: "system", provider: scan.provider, category: safeCategory(scan), now: now() }); await onStage({ stage: "after_scan_failed_transition", attemptCount: job.attemptCount, outcome: scan.outcome }); if (await store.fail(job, scan)) { await onStage({ stage: "after_job_failed", attemptCount: job.attemptCount, outcome: scan.outcome }); result.failed++; } }
     else { if (await store.scheduleRetry(job, scan, now(), random)) { await onStage({ stage: "after_retry_scheduled", attemptCount: job.attemptCount, outcome: scan.outcome }); result.retryScheduled++; } }
   }
   return result;
