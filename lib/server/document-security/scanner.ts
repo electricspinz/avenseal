@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appointmentDocumentStorage } from "@/lib/server/document-storage";
 
 export const documentScanOutcomes = ["clean", "infected", "suspicious", "retryable_failure", "permanent_failure"] as const;
 export type DocumentScanOutcome = (typeof documentScanOutcomes)[number];
@@ -26,6 +27,8 @@ export type DocumentScanResult = Readonly<{
 export interface MalwareScanner {
   scan(request: DocumentScanRequest): Promise<DocumentScanResult>;
 }
+
+export type DocumentScannerFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const scannerRequestSchema = z.object({
   documentId: z.string().trim().min(1),
@@ -148,12 +151,60 @@ class FailClosedMalwareScanner implements MalwareScanner {
   }
 }
 
-/** No request is made until Cloudmersive's result schema is verified for this sensitive-document use case. */
+function cloudmersiveFilename(contentType: DocumentScanRequest["contentType"]) {
+  return contentType === "application/pdf" ? "document.pdf" : contentType === "image/jpeg" ? "document.jpg" : "document.png";
+}
+
+async function scanBytes(bytes: DocumentScanRequest["bytes"]) {
+  if (bytes instanceof ArrayBuffer) return bytes;
+  if (bytes instanceof Uint8Array) return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return new Response(bytes).arrayBuffer();
+}
+
+function isCloudmersiveResponse(value: unknown): value is { CleanResult: boolean; FoundViruses?: unknown[] } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const result = value as Record<string, unknown>;
+  return typeof result.CleanResult === "boolean" && (result.FoundViruses === undefined || Array.isArray(result.FoundViruses));
+}
+
+function cloudmersiveHttpFailure(status: number): DocumentScanResult {
+  if (status === 401 || status === 403) return { outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "authentication_failed" };
+  if (status === 429) return { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "provider_rate_limited" };
+  if ([408, 425, 500, 502, 503, 504].includes(status)) return { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "provider_unavailable" };
+  return status >= 400 && status < 500
+    ? { outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "provider_rejected" }
+    : { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "provider_unavailable" };
+}
+
+/** Server-only adapter for Cloudmersive's verified basic virus-scan endpoint. */
 export class CloudmersiveMalwareScanner implements MalwareScanner {
-  constructor(readonly config: DocumentScannerConfiguration) {}
+  constructor(readonly config: DocumentScannerConfiguration, private readonly fetchImplementation: DocumentScannerFetch = globalThis.fetch) {}
   async scan(request: DocumentScanRequest): Promise<DocumentScanResult> {
-    validateDocumentScanRequest(request);
-    return normalizeDocumentScannerError(new DocumentScannerProviderError("invalid_response"), "cloudmersive");
+    try {
+      validateDocumentScanRequest(request);
+      const bytes = await scanBytes(request.bytes);
+      if (bytes.byteLength === 0 || bytes.byteLength > appointmentDocumentStorage.maximumSizeBytes) throw new DocumentScannerProviderError("invalid_response");
+      const form = new FormData();
+      form.append("inputFile", new Blob([bytes], { type: request.contentType }), cloudmersiveFilename(request.contentType));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
+      try {
+        const response = await this.fetchImplementation(new URL("/virus/scan/file", this.config.baseUrl), { method: "POST", headers: { Apikey: this.config.apiKey }, body: form, signal: controller.signal });
+        if (!response.ok) return cloudmersiveHttpFailure(response.status);
+        let payload: unknown;
+        try { payload = await response.json(); } catch { return { outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" }; }
+        if (!isCloudmersiveResponse(payload)) return { outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" };
+        return payload.CleanResult ? { outcome: "clean", provider: "cloudmersive" } : { outcome: "infected", provider: "cloudmersive" };
+      } catch (error) {
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "provider_timeout" };
+        if (error instanceof TypeError) return { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "network_error" };
+        return { outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "unexpected_error" };
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (error) {
+      return normalizeDocumentScannerError(error, "cloudmersive");
+    }
   }
 }
 

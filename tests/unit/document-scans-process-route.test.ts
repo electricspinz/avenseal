@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const mocks = vi.hoisted(() => ({ process: vi.fn(), admin: vi.fn(), configured: vi.fn(), env: vi.fn() }));
+const mocks = vi.hoisted(() => ({ process: vi.fn(), admin: vi.fn(), configured: vi.fn(), env: vi.fn(), scannerConfiguration: vi.fn() }));
 vi.mock("@/lib/server/document-security/scan-jobs", () => ({ processDocumentScanBatch: mocks.process }));
+vi.mock("@/lib/server/document-security/scanner", () => ({ parseDocumentScannerConfiguration: mocks.scannerConfiguration }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin: mocks.admin, hasSupabaseServiceConfig: mocks.configured }));
 vi.mock("@/lib/env", () => ({ getServerEnv: mocks.env }));
 
@@ -15,6 +16,7 @@ describe("document scan processor route", () => {
     mocks.configured.mockReturnValue(true);
     mocks.admin.mockReturnValue({});
     mocks.process.mockResolvedValue({ claimed: 1, completed: 1, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 });
+    mocks.scannerConfiguration.mockReturnValue({ provider: "cloudmersive", enabled: true });
   });
 
   it("requires the worker secret and rejects browser origins", async () => {
@@ -31,6 +33,17 @@ describe("document scan processor route", () => {
     expect(response.status).toBe(200);
     expect(mocks.process).toHaveBeenCalledWith({}, { batchSize: 20 });
     await expect(response.json()).resolves.toEqual({ result: { claimed: 1, completed: 1, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 } });
+  });
+
+  it("fails closed while scanning is disabled without claiming queued work", async () => {
+    mocks.scannerConfiguration.mockImplementation(() => { throw new Error("disabled"); });
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST", headers: { authorization: "Bearer scan-worker-secret" } }));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "Document scan processing is unavailable." });
+    expect(mocks.process).not.toHaveBeenCalled();
   });
 
   it("returns a safe all-zero aggregate for a valid invocation with no due jobs", async () => {

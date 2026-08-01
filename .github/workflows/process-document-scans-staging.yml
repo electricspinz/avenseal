@@ -1,0 +1,59 @@
+name: Process staging document scans
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avenseal-staging-document-scan-scheduler
+  cancel-in-progress: false
+
+jobs:
+  process:
+    name: Process staged quarantined documents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      AVENSEAL_STAGING_APP_URL: ${{ secrets.AVENSEAL_STAGING_APP_URL }}
+      DOCUMENT_SCAN_WORKER_SECRET: ${{ secrets.DOCUMENT_SCAN_WORKER_SECRET }}
+
+    steps:
+      - name: Validate staging scheduler configuration
+        id: configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${AVENSEAL_STAGING_APP_URL:-}" || -z "${DOCUMENT_SCAN_WORKER_SECRET:-}" ]]; then
+            echo "Staging document-scan scheduler configuration is incomplete."
+            exit 1
+          fi
+          app_url="${AVENSEAL_STAGING_APP_URL%/}"
+          if [[ ! "$app_url" =~ ^https:// ]]; then
+            echo "AVENSEAL_STAGING_APP_URL must use HTTPS."
+            exit 1
+          fi
+          echo "app_url=$app_url" >> "$GITHUB_OUTPUT"
+
+      - name: Process one bounded staging batch
+        shell: bash
+        env:
+          APP_URL: ${{ steps.configuration.outputs.app_url }}
+        run: |
+          set -euo pipefail
+          http_status="$(curl \
+            --silent \
+            --show-error \
+            --fail \
+            --request POST \
+            --header "Authorization: Bearer ${DOCUMENT_SCAN_WORKER_SECRET}" \
+            --connect-timeout 10 \
+            --max-time 60 \
+            --output /dev/null \
+            --write-out "%{http_code}" \
+            "$APP_URL/api/internal/document-scans/process?batchSize=5")"
+          echo "Staging document scan batch succeeded (HTTP $http_status)."
