@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { repository } from "@/lib/server/repository";
 import { organizationSettingsSchema } from "@/lib/validation";
+import { requireAdminOrganizationContext } from "@/lib/server/admin-context";
 
 export async function GET() {
   const settings = await repository.getOrganizationSettings();
@@ -8,6 +9,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  await requireAdminOrganizationContext();
   const body = await request.json();
   const parsed = organizationSettingsSchema.safeParse(body);
   if (!parsed.success) {

@@ -16,7 +16,15 @@ async function verifyAdminSession(token?: string) {
   }
   const secret = configuredSecret ?? "development-only-admin-session-secret";
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
-  return crypto.subtle.verify("HMAC", key, base64UrlToBytes(signature), new TextEncoder().encode(payload));
+  if (!await crypto.subtle.verify("HMAC", key, base64UrlToBytes(signature), new TextEncoder().encode(payload))) return false;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as { issuedAt?: unknown; expiresAt?: unknown };
+    const now = Date.now();
+    return Number.isSafeInteger(parsed.issuedAt) && Number.isSafeInteger(parsed.expiresAt)
+      && (parsed.issuedAt as number) <= now + 5 * 60 * 1000
+      && (parsed.expiresAt as number) > now
+      && (parsed.expiresAt as number) > (parsed.issuedAt as number);
+  } catch { return false; }
 }
 
 export async function middleware(request: NextRequest) {
