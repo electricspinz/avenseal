@@ -5,6 +5,23 @@ import { assertDocumentReviewTransition, type AppointmentDocumentStatus, type Do
 
 export type { AppointmentDocumentStatus, DocumentReviewer } from "@/lib/server/document-review";
 
+export const documentScanStatuses = ["pending", "clean", "infected", "suspicious", "failed"] as const;
+export type DocumentScanStatus = (typeof documentScanStatuses)[number];
+export const documentStorageStatuses = ["quarantined", "active", "removed"] as const;
+export type DocumentStorageStatus = (typeof documentStorageStatuses)[number];
+export const documentMetadataCreationDefaults = {
+  status: "uploaded",
+  scan_status: "pending",
+  storage_status: "quarantined",
+  scan_attempt_count: 0
+} as const;
+export const documentScanFailureCategories = ["provider_unavailable", "provider_timeout", "transient_error", "invalid_response"] as const;
+export type DocumentScanFailureCategory = (typeof documentScanFailureCategories)[number];
+export const documentScanBlockedCategories = ["policy_blocked", "suspicious_content"] as const;
+export type DocumentScanBlockedCategory = (typeof documentScanBlockedCategories)[number];
+export type DocumentScanActor = "system";
+export type DocumentStorageActor = "system";
+
 export type AppointmentDocumentFile = Readonly<{
   id: string;
   organizationId: string;
@@ -22,6 +39,13 @@ export type AppointmentDocumentFile = Readonly<{
   uploadedAt: string;
   deletedAt: string | null;
   metadata: Readonly<Record<string, string | number | boolean | null>>;
+  scanStatus?: DocumentScanStatus;
+  storageStatus?: DocumentStorageStatus;
+  scanProvider?: string | null;
+  scanRequestedAt?: string | null;
+  scannedAt?: string | null;
+  scanFailureCategory?: string | null;
+  scanAttemptCount?: number;
   createdAt: string;
   updatedAt: string;
 }>;
@@ -33,13 +57,65 @@ type DocumentRow = {
   content_type: AppointmentDocumentContentType; size_bytes: number; status: AppointmentDocumentStatus; uploaded_by_type: AppointmentDocumentFile["uploadedByType"];
   reviewed_by: string | null; reviewer: { full_name: string | null; email: string | null } | null; reviewed_at: string | null; review_notes: string | null;
   uploaded_at: string; deleted_at: string | null; metadata: AppointmentDocumentFile["metadata"] | null; created_at: string; updated_at: string;
+  scan_status?: string | null; storage_status?: string | null; scan_provider?: string | null; scan_requested_at?: string | null; scanned_at?: string | null; scan_failure_category?: string | null; scan_attempt_count?: number | null;
 };
 
-function mapDocument(row: DocumentRow): AppointmentDocumentFile {
-  return { id: row.id, organizationId: row.organization_id, appointmentId: row.appointment_request_id, originalFilename: row.original_filename, storageKey: row.storage_key, contentType: row.content_type, sizeBytes: Number(row.size_bytes), status: row.status, reviewedBy: row.reviewed_by, reviewerName: row.reviewer?.full_name ?? row.reviewer?.email ?? null, reviewedAt: row.reviewed_at, reviewNotes: row.review_notes, uploadedByType: row.uploaded_by_type, uploadedAt: row.uploaded_at, deletedAt: row.deleted_at, metadata: row.metadata ?? {}, createdAt: row.created_at, updatedAt: row.updated_at };
+type DocumentScanInput = Readonly<{
+  organizationId: string;
+  appointmentId: string;
+  documentId: string;
+  actorType: DocumentScanActor;
+  now?: Date;
+}>;
+
+type DocumentStorageInput = Readonly<{
+  organizationId: string;
+  appointmentId: string;
+  documentId: string;
+  actorType: DocumentStorageActor;
+  now?: Date;
+}>;
+
+const plainTextScanValuePattern = /(^|\s)(#{1,6}\s|[-*+]\s|>\s|`|\[[^\]]+\]\([^)]*\))|[<>]|\b(?:https?:\/\/|www\.)/i;
+
+function validateDocumentSystemActor(actorType: "system"): "system" {
+  if (actorType !== "system") throw new Error("Document transition requires a trusted system actor.");
+  return actorType;
+}
+
+function validateDocumentScanProvider(provider: string): string {
+  const normalized = provider.trim();
+  if (normalized.length === 0 || normalized.length > 120 || plainTextScanValuePattern.test(normalized)) throw new Error("Document scan provider must be plain text.");
+  return normalized;
+}
+
+function validateDocumentScanCategory<T extends readonly string[]>(category: string, allowed: T, label: string): T[number] {
+  const normalized = category.trim();
+  if (!allowed.includes(normalized)) throw new Error(`Document scan ${label} is invalid.`);
+  return normalized as T[number];
+}
+
+function requiredStatus<T extends readonly string[]>(value: string | null | undefined, allowed: T, fallback: T[number], label: string): T[number] {
+  if (value === null || value === undefined) return fallback;
+  if (!allowed.includes(value)) throw new Error(`Document ${label} is invalid.`);
+  return value as T[number];
+}
+
+export function mapDocument(row: DocumentRow): AppointmentDocumentFile {
+  const scanStatus = requiredStatus(row.scan_status, documentScanStatuses, "pending", "scan status");
+  const storageStatus = requiredStatus(row.storage_status, documentStorageStatuses, "quarantined", "storage status");
+  const scanAttemptCount = row.scan_attempt_count ?? 0;
+  if (!Number.isInteger(scanAttemptCount) || scanAttemptCount < 0) throw new Error("Document scan attempt count is invalid.");
+  if (storageStatus === "active" && scanStatus !== "clean") throw new Error("Document active storage requires a clean scan.");
+  return { id: row.id, organizationId: row.organization_id, appointmentId: row.appointment_request_id, originalFilename: row.original_filename, storageKey: row.storage_key, contentType: row.content_type, sizeBytes: Number(row.size_bytes), status: row.status, reviewedBy: row.reviewed_by, reviewerName: row.reviewer?.full_name ?? row.reviewer?.email ?? null, reviewedAt: row.reviewed_at, reviewNotes: row.review_notes, uploadedByType: row.uploaded_by_type, uploadedAt: row.uploaded_at, deletedAt: row.deleted_at, metadata: row.metadata ?? {}, scanStatus, storageStatus, scanProvider: row.scan_provider ?? null, scanRequestedAt: row.scan_requested_at ?? null, scannedAt: row.scanned_at ?? null, scanFailureCategory: row.scan_failure_category ?? null, scanAttemptCount, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 const documentSelect = "*, reviewer:user_profiles(full_name,email)";
+const downloadDocumentSelect = "id,organization_id,appointment_request_id,original_filename,storage_key,content_type,size_bytes,status,uploaded_by_type,uploaded_at,deleted_at,scan_status,storage_status,scan_attempt_count,created_at,updated_at";
+
+function mapDownloadDocument(row: Omit<DocumentRow, "reviewed_by" | "reviewer" | "reviewed_at" | "review_notes" | "metadata">): AppointmentDocumentFile {
+  return mapDocument({ ...row, reviewed_by: null, reviewer: null, reviewed_at: null, review_notes: null, metadata: {} });
+}
 
 export function documentUploadedAudit(document: Pick<AppointmentDocumentFile, "id" | "organizationId" | "appointmentId" | "contentType" | "sizeBytes" | "uploadedByType">) {
   return {
@@ -73,6 +149,42 @@ export function documentReviewedAudit(document: Pick<AppointmentDocumentFile, "i
 
 export function documentReplacedAudit(input: { organizationId: string; appointmentId: string; previousDocumentId: string; replacementDocumentId: string }) {
   return { organization_id: input.organizationId, action: "document.replaced", entity_type: "appointment_request", entity_id: input.appointmentId, metadata: { previousDocumentId: input.previousDocumentId, replacementDocumentId: input.replacementDocumentId } };
+}
+
+function documentScanPendingAudit(document: AppointmentDocumentFile) {
+  return documentScanAudit({ document, actorType: "system", action: "document.scan_pending", resultCategory: "upload" });
+}
+
+function documentScanAudit(input: { document: AppointmentDocumentFile; actorType: DocumentScanActor; action: "document.scan_clean" | "document.scan_blocked" | "document.scan_failed" | "document.scan_pending"; resultCategory: string; provider?: string | null }) {
+  return {
+    organization_id: input.document.organizationId,
+    action: input.action,
+    entity_type: "appointment_request",
+    entity_id: input.document.appointmentId,
+    metadata: {
+      documentId: input.document.id,
+      actorType: input.actorType,
+      resultCategory: input.resultCategory,
+      attemptCount: input.document.scanAttemptCount ?? 0,
+      ...(input.provider ? { provider: input.provider } : {})
+    }
+  };
+}
+
+function documentStorageAudit(input: { document: AppointmentDocumentFile; actorType: DocumentStorageActor; action: "document.storage_activated" | "document.storage_removed"; resultCategory: "active" | "removed" }) {
+  return {
+    organization_id: input.document.organizationId,
+    action: input.action,
+    entity_type: "appointment_request",
+    entity_id: input.document.appointmentId,
+    metadata: {
+      documentId: input.document.id,
+      actorType: input.actorType,
+      resultCategory: input.resultCategory,
+      scanStatus: input.document.scanStatus,
+      attemptCount: input.document.scanAttemptCount ?? 0
+    }
+  };
 }
 
 function customerDocumentStatus(document: AppointmentDocumentFile): CustomerDocumentStatus {
@@ -142,6 +254,127 @@ async function resolveDocumentReviewer(supabase: SupabaseClient, organizationId:
   return { id: reviewer.id, role: data.role };
 }
 
+async function getScannableDocument(supabase: SupabaseClient, input: Pick<DocumentScanInput, "organizationId" | "appointmentId" | "documentId">) {
+  const { data, error } = await supabase
+    .from("appointment_document_files")
+    .select(documentSelect)
+    .eq("organization_id", input.organizationId)
+    .eq("appointment_request_id", input.appointmentId)
+    .eq("id", input.documentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Document is unavailable for scanning.");
+  const document = mapDocument(data as DocumentRow);
+  if (document.storageStatus === "removed") throw new Error("Document is unavailable for scanning.");
+  return document;
+}
+
+function assertDocumentScanTransition(from: DocumentScanStatus, to: DocumentScanStatus) {
+  if (from === to && to !== "pending") return "noop" as const;
+  if ((from === "pending" && ["clean", "infected", "suspicious", "failed"].includes(to)) || (from === "failed" && to === "pending")) return "transition" as const;
+  throw new Error("Document scan transition is not allowed.");
+}
+
+type DocumentScanTransition = Readonly<{
+  target: DocumentScanStatus;
+  occurredAt: string;
+  provider: string | null;
+  failureCategory: string | null;
+  auditAction: "document.scan_clean" | "document.scan_blocked" | "document.scan_failed" | "document.scan_pending";
+  resultCategory: string;
+}>;
+
+async function transitionDocumentScan(
+  supabase: SupabaseClient,
+  input: DocumentScanInput,
+  transition: DocumentScanTransition
+) {
+  const actorType = validateDocumentSystemActor(input.actorType);
+  const current = await getScannableDocument(supabase, input);
+  if (assertDocumentScanTransition(current.scanStatus ?? "pending", transition.target) === "noop") return current;
+  const fields = transition.target === "pending"
+    ? { scan_status: "pending", scan_provider: null, scan_requested_at: transition.occurredAt, scanned_at: null, scan_failure_category: null, scan_attempt_count: current.scanAttemptCount ?? 0, updated_at: transition.occurredAt }
+    : { scan_status: transition.target, scan_provider: transition.provider, scanned_at: transition.occurredAt, scan_failure_category: transition.failureCategory, scan_attempt_count: (current.scanAttemptCount ?? 0) + 1, updated_at: transition.occurredAt };
+
+  const { data, error } = await supabase
+    .from("appointment_document_files")
+    .update(fields)
+    .eq("organization_id", input.organizationId)
+    .eq("appointment_request_id", input.appointmentId)
+    .eq("id", input.documentId)
+    .eq("scan_status", current.scanStatus ?? "pending")
+    .is("deleted_at", null)
+    .select(documentSelect)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    const latest = await getScannableDocument(supabase, input);
+    if (latest.scanStatus === transition.target) return latest;
+    throw new Error("Document scan transition is not allowed.");
+  }
+
+  const document = mapDocument(data as DocumentRow);
+  const { error: auditError } = await supabase.from("audit_logs").insert(documentScanAudit({ document, actorType, action: transition.auditAction, resultCategory: transition.resultCategory, provider: transition.provider }));
+  if (auditError) throw auditError;
+  return document;
+}
+
+async function getStorageTransitionDocument(supabase: SupabaseClient, input: Pick<DocumentStorageInput, "organizationId" | "appointmentId" | "documentId">) {
+  const { data, error } = await supabase
+    .from("appointment_document_files")
+    .select(documentSelect)
+    .eq("organization_id", input.organizationId)
+    .eq("appointment_request_id", input.appointmentId)
+    .eq("id", input.documentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Document is unavailable for storage transition.");
+  return mapDocument(data as DocumentRow);
+}
+
+function assertDocumentStorageTransition(document: AppointmentDocumentFile, target: "active" | "removed") {
+  const storageStatus = document.storageStatus ?? "quarantined";
+  if (storageStatus === target) return "noop" as const;
+  if (target === "active" && storageStatus === "quarantined" && document.scanStatus === "clean") return "transition" as const;
+  if (target === "removed" && (storageStatus === "quarantined" || storageStatus === "active")) return "transition" as const;
+  throw new Error("Document storage transition is not allowed.");
+}
+
+async function transitionDocumentStorage(
+  supabase: SupabaseClient,
+  input: DocumentStorageInput,
+  target: "active" | "removed"
+) {
+  const actorType = validateDocumentSystemActor(input.actorType);
+  const current = await getStorageTransitionDocument(supabase, input);
+  if (assertDocumentStorageTransition(current, target) === "noop") return current;
+  const updatedAt = (input.now ?? new Date()).toISOString();
+  const { data, error } = await supabase
+    .from("appointment_document_files")
+    .update({ storage_status: target, updated_at: updatedAt })
+    .eq("organization_id", input.organizationId)
+    .eq("appointment_request_id", input.appointmentId)
+    .eq("id", input.documentId)
+    .eq("storage_status", current.storageStatus ?? "quarantined")
+    .is("deleted_at", null)
+    .select(documentSelect)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    const latest = await getStorageTransitionDocument(supabase, input);
+    if (latest.storageStatus === target) return latest;
+    throw new Error("Document storage transition is not allowed.");
+  }
+  const document = mapDocument(data as DocumentRow);
+  const { error: auditError } = await supabase
+    .from("audit_logs")
+    .insert(documentStorageAudit({ document, actorType, action: target === "active" ? "document.storage_activated" : "document.storage_removed", resultCategory: target }));
+  if (auditError) throw auditError;
+  return document;
+}
+
 export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
   return {
     async persistUploadedMetadata(input: { organizationId: string; appointmentId: string; uploadedByType: AppointmentDocumentFile["uploadedByType"]; metadata: unknown; documentId?: string }) {
@@ -153,12 +386,16 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
       const storageKey = appointmentDocumentStorageKey({ organizationId: input.organizationId, appointmentId: input.appointmentId, documentId: id });
       const { data, error } = await supabase.from("appointment_document_files").insert({
         id, organization_id: input.organizationId, appointment_request_id: input.appointmentId, original_filename: metadata.originalFilename,
-        storage_key: storageKey, content_type: metadata.contentType, size_bytes: metadata.sizeBytes, status: "uploaded", uploaded_by_type: input.uploadedByType, metadata: {}
+        storage_key: storageKey, content_type: metadata.contentType, size_bytes: metadata.sizeBytes,
+        ...documentMetadataCreationDefaults,
+        uploaded_by_type: input.uploadedByType, metadata: {}
       }).select(documentSelect).single();
       if (error) throw error;
       const document = mapDocument(data as DocumentRow);
       const { error: auditError } = await supabase.from("audit_logs").insert(documentUploadedAudit(document));
       if (auditError) throw auditError;
+      const { error: scanAuditError } = await supabase.from("audit_logs").insert(documentScanPendingAudit(document));
+      if (scanAuditError) throw scanAuditError;
       return document;
     },
     async getDocument(organizationId: string, documentId: string) {
@@ -192,7 +429,18 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
       return data ? mapDocument(data as DocumentRow) : null;
     },
     async getDocumentForDownload(organizationId: string, appointmentId: string, documentId: string) {
-      return this.validateDocumentOwnership(organizationId, appointmentId, documentId);
+      const { data, error } = await supabase
+        .from("appointment_document_files")
+        .select(downloadDocumentSelect)
+        .eq("organization_id", organizationId)
+        .eq("appointment_request_id", appointmentId)
+        .eq("id", documentId)
+        .eq("scan_status", "clean")
+        .eq("storage_status", "active")
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapDownloadDocument(data as Omit<DocumentRow, "reviewed_by" | "reviewer" | "reviewed_at" | "review_notes" | "metadata">) : null;
     },
     async recordDocumentDownload(document: AppointmentDocumentFile, actorType: "owner" | "admin") {
       const { error } = await supabase.from("audit_logs").insert(documentDownloadedAudit(document, actorType));
@@ -217,24 +465,40 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
     async replaceDocument(input: { organizationId: string; appointmentId: string; rejectedDocumentId: string; uploadedByType: AppointmentDocumentFile["uploadedByType"]; metadata: unknown; documentId?: string }) {
       const previous = await this.validateDocumentOwnership(input.organizationId, input.appointmentId, input.rejectedDocumentId);
       if (!previous || previous.status !== "rejected") throw new Error("Document replacement is unavailable.");
-      const removed = await this.softDeletePlaceholder(input.organizationId, previous.id);
-      if (!removed) throw new Error("Document replacement is unavailable.");
-      let replacement: AppointmentDocumentFile;
-      try {
-        replacement = await this.persistUploadedMetadata({ organizationId: input.organizationId, appointmentId: input.appointmentId, uploadedByType: input.uploadedByType, metadata: input.metadata, documentId: input.documentId });
-      } catch (error) {
-        await supabase.from("appointment_document_files").update({ deleted_at: null }).eq("organization_id", input.organizationId).eq("appointment_request_id", input.appointmentId).eq("id", previous.id).select(documentSelect).maybeSingle();
-        throw error;
-      }
-      const { error } = await supabase.from("audit_logs").insert(documentReplacedAudit({ organizationId: input.organizationId, appointmentId: input.appointmentId, previousDocumentId: previous.id, replacementDocumentId: replacement.id }));
-      if (error) throw error;
-      return replacement;
+      return this.persistUploadedMetadata({ organizationId: input.organizationId, appointmentId: input.appointmentId, uploadedByType: input.uploadedByType, metadata: input.metadata, documentId: input.documentId });
     },
     async approveDocument(input: { organizationId: string; appointmentId: string; documentId: string; reviewer: DocumentReviewer; reviewNotes?: string | null; now?: Date }) {
       return reviewDocument(supabase, input, "approved");
     },
     async rejectDocument(input: { organizationId: string; appointmentId: string; documentId: string; reviewer: DocumentReviewer; reviewNotes?: string | null; now?: Date }) {
       return reviewDocument(supabase, input, "rejected");
+    },
+    async markDocumentScanClean(input: DocumentScanInput & { provider: string }) {
+      const provider = validateDocumentScanProvider(input.provider);
+      const scannedAt = (input.now ?? new Date()).toISOString();
+      return transitionDocumentScan(supabase, input, { target: "clean", occurredAt: scannedAt, provider, failureCategory: null, auditAction: "document.scan_clean", resultCategory: "clean" });
+    },
+    async markDocumentScanBlocked(input: DocumentScanInput & { result: "infected" | "suspicious"; provider: string; category?: string }) {
+      const provider = validateDocumentScanProvider(input.provider);
+      const category = input.category === undefined ? null : validateDocumentScanCategory(input.category, documentScanBlockedCategories, "blocked category");
+      const scannedAt = (input.now ?? new Date()).toISOString();
+      return transitionDocumentScan(supabase, input, { target: input.result, occurredAt: scannedAt, provider, failureCategory: category, auditAction: "document.scan_blocked", resultCategory: input.result });
+    },
+    async markDocumentScanFailed(input: DocumentScanInput & { provider?: string; category: string }) {
+      const provider = input.provider === undefined ? null : validateDocumentScanProvider(input.provider);
+      const category = validateDocumentScanCategory(input.category, documentScanFailureCategories, "failure category");
+      const scannedAt = (input.now ?? new Date()).toISOString();
+      return transitionDocumentScan(supabase, input, { target: "failed", occurredAt: scannedAt, provider, failureCategory: category, auditAction: "document.scan_failed", resultCategory: category });
+    },
+    async resetDocumentScanForRetry(input: DocumentScanInput) {
+      const requestedAt = (input.now ?? new Date()).toISOString();
+      return transitionDocumentScan(supabase, input, { target: "pending", occurredAt: requestedAt, provider: null, failureCategory: null, auditAction: "document.scan_pending", resultCategory: "retry" });
+    },
+    async activateCleanDocument(input: DocumentStorageInput) {
+      return transitionDocumentStorage(supabase, input, "active");
+    },
+    async markDocumentStorageRemoved(input: DocumentStorageInput) {
+      return transitionDocumentStorage(supabase, input, "removed");
     },
     async softDeletePlaceholder(organizationId: string, documentId: string) {
       const { data, error } = await supabase.from("appointment_document_files").update({ deleted_at: new Date().toISOString() }).eq("organization_id", organizationId).eq("id", documentId).is("deleted_at", null).select(documentSelect).maybeSingle();

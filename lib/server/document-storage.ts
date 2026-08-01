@@ -36,9 +36,15 @@ export function validateAppointmentDocumentUploadMetadata(input: unknown): Appoi
   return uploadMetadataSchema.parse(input);
 }
 
-/** Object names are opaque, server-generated paths; customer filenames never control storage location. */
+export function validateAppointmentDocumentSignature(contentType: AppointmentDocumentContentType, bytes: ArrayBuffer) {
+  const value = new Uint8Array(bytes);
+  const valid = contentType === "application/pdf" ? value.length >= 5 && value[0] === 0x25 && value[1] === 0x50 && value[2] === 0x44 && value[3] === 0x46 && value[4] === 0x2d : contentType === "image/jpeg" ? value.length >= 3 && value[0] === 0xff && value[1] === 0xd8 && value[2] === 0xff : value.length >= 8 && value[0] === 0x89 && value[1] === 0x50 && value[2] === 0x4e && value[3] === 0x47 && value[4] === 0x0d && value[5] === 0x0a && value[6] === 0x1a && value[7] === 0x0a;
+  if (!valid) throw new Error("Document content does not match its declared file type.");
+}
+
+/** Quarantine object names are opaque, server-generated paths; customer filenames never control storage location. */
 export function appointmentDocumentStorageKey(input: { organizationId: string; appointmentId: string; documentId: string }) {
-  return `organizations/${input.organizationId}/appointments/${input.appointmentId}/documents/${input.documentId}`;
+  return `quarantine/organizations/${input.organizationId}/appointments/${input.appointmentId}/${input.documentId}`;
 }
 
 /** The server-only storage contract for a future upload/download route. This sprint does not invoke it. */
