@@ -1137,6 +1137,18 @@ export const repository = {
     if (!data) throw new Error("Only failed communications can be retried.");
     return data;
   },
+  async getCommunicationRetryTarget(input: { organizationId: string; communicationId: string }) {
+    if (!hasSupabaseServiceConfig()) return null;
+    const { data, error } = await getSupabaseAdmin()
+      .from("communication_messages")
+      .select("id,status")
+      .eq("id", input.communicationId)
+      .eq("organization_id", input.organizationId)
+      .eq("status", "failed")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { id: String(data.id), retryEligible: String(data.status) === "failed" } : null;
+  },
   async createPaymentLink(appointmentId: string, dependencies: { createCheckoutSession?: typeof createStripeCheckoutSession; now?: () => Date } = {}) {
     const createCheckoutSession = dependencies.createCheckoutSession ?? createStripeCheckoutSession;
     const now = dependencies.now ?? (() => new Date());

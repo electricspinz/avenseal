@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasTrustedAdminMutationOrigin } from "@/lib/server/trusted-origin";
 
 const cookieName = "avenseal_admin_session";
 
@@ -39,6 +40,10 @@ export async function middleware(request: NextRequest) {
   const isAdminPage = pathname.startsWith("/admin") && pathname !== "/admin/login";
   const isAdminApi = pathname.startsWith("/api/admin") && pathname !== "/api/admin/login";
   if (!isAdminPage && !isAdminApi) return NextResponse.next();
+
+  if (isAdminApi && ["POST", "PUT", "PATCH", "DELETE"].includes(request.method) && !hasTrustedAdminMutationOrigin(request)) {
+    return NextResponse.json({ error: "Invalid request origin." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
 
   const isAuthed = await verifyAdminSession(request.cookies.get(cookieName)?.value);
   if (isAuthed) return NextResponse.next();
