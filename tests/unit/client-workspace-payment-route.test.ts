@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getCustomerAppointmentByAccessToken: vi.fn(), createPaymentLink: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getCustomerAppointmentByAccessToken: vi.fn(), createPaymentLink: vi.fn(), consumeDistributedRateLimit: vi.fn() }));
 vi.mock("@/lib/server/repository", () => ({ repository: mocks }));
+vi.mock("@/lib/server/distributed-rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/server/distributed-rate-limit")>()), consumeDistributedRateLimit: mocks.consumeDistributedRateLimit }));
 
 import { POST } from "@/app/api/appointments/access/[token]/payment/route";
 
@@ -9,7 +10,7 @@ const payable = { appointmentId: "appointment-a", organizationId: "organization-
 const call = (token: string, body?: unknown) => POST(new Request(`http://localhost/api/appointments/access/${token}/payment`, { method: "POST", body: body ? JSON.stringify(body) : undefined }), { params: Promise.resolve({ token }) });
 
 describe("Client Workspace payment endpoint", () => {
-  beforeEach(() => { vi.resetAllMocks(); });
+  beforeEach(() => { vi.resetAllMocks(); mocks.consumeDistributedRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 60 }); });
 
   it("returns only an immediate Checkout URL for the token-owned payable appointment", async () => {
     mocks.getCustomerAppointmentByAccessToken.mockResolvedValue(payable);

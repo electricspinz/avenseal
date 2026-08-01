@@ -1,16 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getCustomerAppointmentByAccessToken: vi.fn(), uploadCustomerAppointmentDocument: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getCustomerAppointmentByAccessToken: vi.fn(), uploadCustomerAppointmentDocument: vi.fn(), consumeDistributedRateLimit: vi.fn() }));
 vi.mock("@/lib/server/repository", () => ({ repository: { getCustomerAppointmentByAccessToken: mocks.getCustomerAppointmentByAccessToken } }));
 vi.mock("@/lib/server/document-upload", () => ({ uploadCustomerAppointmentDocument: mocks.uploadCustomerAppointmentDocument }));
+vi.mock("@/lib/server/distributed-rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/server/distributed-rate-limit")>()), consumeDistributedRateLimit: mocks.consumeDistributedRateLimit }));
 
 import { POST } from "@/app/api/appointments/access/[token]/documents/route";
 
 const appointment = { organizationId: "org-1", appointmentId: "appointment-1" };
-function request(files: File[], replacementDocumentId: string | null = null) { return { formData: async () => ({ getAll: (name: string) => name === "file" ? files : [], get: (name: string) => name === "replacementDocumentId" ? replacementDocumentId : null }) } as unknown as Request; }
+function request(files: File[], replacementDocumentId: string | null = null) { return { headers: new Headers(), formData: async () => ({ getAll: (name: string) => name === "file" ? files : [], get: (name: string) => name === "replacementDocumentId" ? replacementDocumentId : null }) } as unknown as Request; }
 
 describe("Client Workspace document upload endpoint", () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => { vi.resetAllMocks(); mocks.consumeDistributedRateLimit.mockResolvedValue({ allowed: true, retryAfterSeconds: 60 }); });
 
   it("uses only token-owned organization and appointment values and returns safe metadata", async () => {
     mocks.getCustomerAppointmentByAccessToken.mockResolvedValue(appointment);
