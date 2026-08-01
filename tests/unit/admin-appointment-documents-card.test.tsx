@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminAppointmentDocumentsCard } from "@/components/admin-appointment-documents-card";
 
-const documentRecord = { id: "document-1", organizationId: "org-1", appointmentId: "appointment-1", originalFilename: "document.pdf", storageKey: "organizations/org-1/private", contentType: "application/pdf" as const, sizeBytes: 1024, status: "uploaded" as const, reviewedBy: null, reviewerName: null, reviewedAt: null, reviewNotes: null, uploadedByType: "customer" as const, uploadedAt: "2026-08-01T10:00:00.000Z", deletedAt: null, metadata: {}, createdAt: "2026-08-01T10:00:00.000Z", updatedAt: "2026-08-01T10:00:00.000Z" };
+const documentRecord = { id: "document-1", organizationId: "org-1", appointmentId: "appointment-1", originalFilename: "document.pdf", storageKey: "quarantine/organizations/org-1/private", contentType: "application/pdf" as const, sizeBytes: 1024, status: "uploaded" as const, reviewedBy: null, reviewerName: null, reviewedAt: null, reviewNotes: null, uploadedByType: "customer" as const, uploadedAt: "2026-08-01T10:00:00.000Z", deletedAt: null, metadata: {}, scanStatus: "clean" as const, storageStatus: "active" as const, scanProvider: null, scanRequestedAt: null, scannedAt: null, scanFailureCategory: null, scanAttemptCount: 1, createdAt: "2026-08-01T10:00:00.000Z", updatedAt: "2026-08-01T10:00:00.000Z" };
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,7 +13,13 @@ describe("AdminAppointmentDocumentsCard", () => {
     expect(screen.getByText("document.pdf")).toBeTruthy();
     expect(screen.getByText(/application\/pdf.*1 KB.*uploaded/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Download" })).toHaveProperty("href", expect.stringContaining("/api/admin/appointments/appointment-1/documents/document-1/download"));
-    expect(document.body.textContent).not.toContain("organizations/org-1");
+    expect(document.body.textContent).not.toContain("quarantine/");
+  });
+
+  it("does not offer a download action until a document is clean and active", () => {
+    render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[{ ...documentRecord, scanStatus: "pending", storageStatus: "quarantined" }]} />);
+    expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
+    expect(screen.getByText("Download unavailable")).toBeTruthy();
   });
 
   it("confirms approval, invokes the review endpoint once, and renders review metadata", async () => {
