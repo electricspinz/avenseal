@@ -244,3 +244,38 @@ Assume **1.5 scanned files per appointment** until production data exists: 100 a
 | **B2D — Operations and Staging Verification** | Health aggregates, future Mission Control projection, controlled manual retry, runbook, clean-file/EICAR/outage staging verification. |
 
 **Launch remains blocked.** Production uploads must remain pending/quarantined and non-downloadable until: a provider is selected and contractually approved; B2B/C are implemented and reviewed; worker credentials/configuration are present; staging verifies clean, blocked, outage, concurrency, and privacy paths; and Operations accepts the runbook and monitoring.
+
+## B2B implementation status
+
+**Current:** B2B provides the server-only `MalwareScanner` contract, constrained request/result types, deterministic test-only fake scanner, fail-closed configuration parser/factory, bounded timeout helper, and safe failure normalization. The factory recognizes only an explicitly enabled `cloudmersive` configuration. Missing, disabled, unsupported, invalid, or incomplete configuration yields a permanent safe failure; it never selects a fake scanner or a clean result by environment default.
+
+The implemented configuration inputs are `DOCUMENT_SCANNER_PROVIDER`, `DOCUMENT_SCANNER_ENABLED`, `DOCUMENT_SCANNER_API_KEY`, `DOCUMENT_SCANNER_BASE_URL`, and `DOCUMENT_SCANNER_TIMEOUT_MS`. The default timeout is 45 seconds and the adapter never retries: B2C owns durable retries, scan jobs, private object retrieval, document transitions, activation, and operational invocation.
+
+**Cloudmersive adapter status:** the documented virus-scan endpoint is not called yet. The official material reviewed establishes endpoint availability, but not a reviewed response DTO sufficient to map clean, infected, or suspicious results safely for notarization documents. The adapter therefore returns a deliberate fail-closed `permanent_failure` with the safe `invalid_response` category and performs no network request. It remains blocked until the provider's exact request/response contract, privacy/DPA, retention/deletion, residency, size/rate, authentication, support, and incident terms are confirmed.
+
+## B2C execution status
+
+**Current:** migration `0020_document_scan_jobs.sql` adds a private, tenant-scoped execution queue. It holds only scoped IDs, execution state, bounded attempts, lease data, safe provider/result metadata, and timestamps—never bytes, keys, filenames, URLs, tokens, raw responses, or signatures. One partial unique index permits only one active (`pending`, `claimed`, or `retry_scheduled`) job per document. Enqueue is a service-role RPC that first verifies the document remains pending, quarantined, active, and tenant/appointment scoped.
+
+The service-role claim RPC recovers expired five-minute leases as due retry work, then uses `FOR UPDATE SKIP LOCKED` to claim a bounded batch. A claim increments the attempt count exactly once. The worker re-reads the scoped document, downloads its private quarantine object server-side, invokes only the provider-neutral scanner, and never exposes a signed URL. It handles clean results by marking clean, activating guarded storage, then completing the job; a replay after either durable transition is idempotent. Infected/suspicious files remain quarantined and become blocked. Retryable failures use the centralized 1m, 5m, 15m, 1h, 6h schedule (maximum five attempts); permanent/exhausted outcomes become failed and remain quarantined.
+
+`POST /api/internal/document-scans/process` accepts only the server-held `DOCUMENT_SCAN_WORKER_SECRET` through timing-safe bearer comparison, rejects browser Origins, accepts no cookie authorization, bounds batches to 20, and returns aggregate counts only. Upload metadata persistence now enqueues exactly one job after private quarantine storage succeeds. If enqueue fails, the document stays pending/quarantined for operational recovery, emits only a safe enqueue-failure audit, and returns a safe processing error; it is never deleted, scanned synchronously, marked clean, or activated. The Cloudmersive adapter remains fail-closed and no live scanning can occur until its contract is approved.
+
+### Replay and lease-loss safety
+
+Document state is authoritative over a stale job snapshot. A replay that sees `clean + active` completes its claimed job without a storage fetch or another provider call; a replay that sees infected or suspicious finalizes the job as blocked; deleted, removed, mismatched, or otherwise ineligible records are cancelled without scanning. A clean transition followed by activation failure remains clean/quarantined and non-downloadable; a later claimed retry uses the guarded, idempotent activation transition. Activation followed by job-completion failure likewise replays to completion without duplicate scan or storage-transition audits.
+
+Every final job mutation is additionally scoped to the claiming worker identity. When a lease expires and a second worker claims the job, the original worker cannot complete, block, fail, cancel, or reschedule it, and cannot create a retry audit. Operators should investigate claimed jobs approaching their five-minute lease, not manually alter document security states. Audit idempotency for document scan/storage transitions is provided by their guarded repository transitions; job-start records remain per successful claim attempt, which is intentional operational history rather than a customer-facing event.
+
+The worker treats durable document state as authoritative during replay: `clean + quarantined` retries guarded activation without fetching or rescanning; `clean + active` completes only the job; infected/suspicious finalizes only the job as blocked; and `failed + quarantined` finalizes only the job as failed. Storage retrieval errors, oversized objects, and unavailable bytes remain fail-closed and retryable until the bounded attempt limit, while configuration/authentication/rejection failures are terminal. A mixed worker batch isolates per-job failure; its route returns aggregate counts only. The remaining known audit limitation is that each successful claim intentionally records a `document.scan_started` operational event; durable scan/storage transition audits are at most once through guarded state transitions.
+
+| Worker storage condition | Current classification | Safety outcome |
+| --- | --- | --- |
+| Read exception, missing object, empty/corrupt bytes, oversized object, or unexpected storage client error | Retryable until five claimed attempts are exhausted | No scanner call when retrieval throws or exceeds the maximum; document remains quarantined and non-downloadable. |
+| Exhausted retry budget | Terminal failed | Existing guarded failed transition; quarantine remains. |
+
+The storage adapter currently exposes only a safe generic download failure, so B2C does not infer a permanent object-not-found result from provider error text. Refining that distinction requires a typed storage-error contract and is deferred rather than parsing untrusted provider messages.
+
+### Deterministic worker fault harness
+
+The server-only worker exposes typed, dependency-injected checkpoints for tests: claim, state revalidation, storage fetch, scan result, clean transition, storage activation, and job completion. Hooks receive only stage, attempt count, and normalized outcome; they never receive bytes, keys, URLs, tokens, filenames, credentials, or provider responses. Production uses the same worker with real dependencies and a no-op hook; no environment variable, route input, or global state can enable faults. A hook exception simulates a crash after the preceding durable step, leaving that state for a later claimed worker to replay.

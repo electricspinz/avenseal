@@ -57,6 +57,8 @@ const environmentSchema = z.object({
   COMMUNICATION_PROCESSOR_BATCH_SIZE: optionalPositiveInt.default(10),
   COMMUNICATION_PROCESSING_TIMEOUT_MINUTES: optionalPositiveInt.default(10),
   COMMUNICATION_SAFE_RECIPIENTS: optionalString,
+  DOCUMENT_SCAN_WORKER_SECRET: optionalString,
+  DOCUMENT_SCAN_WORKER_BATCH_SIZE: optionalPositiveInt.default(10),
   LIVE_SUPABASE_ENVIRONMENT: optionalString,
 
   E2E_PORT: optionalPositiveInt,
