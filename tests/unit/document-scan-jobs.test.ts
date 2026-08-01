@@ -49,9 +49,11 @@ describe("document scan job store", () => {
       { status: "completed", created_at: "2026-08-01T02:00:00.000Z", completed_at: "2026-08-01T03:00:00.000Z", scan_duration_ms: 100 },
       { status: "blocked", created_at: "2026-08-01T04:00:00.000Z", completed_at: null, scan_duration_ms: 300 }
     ];
-    const chain = { select: () => chain, eq: () => chain, then: (resolve: (value: { data: typeof rows; error: null }) => unknown) => Promise.resolve({ data: rows, error: null }).then(resolve) };
+    const filters: Array<[string, unknown]> = [];
+    const chain = { select: () => chain, eq: (field: string, value: unknown) => { filters.push([field, value]); return chain; }, then: (resolve: (value: { data: typeof rows; error: null }) => unknown) => Promise.resolve({ data: rows, error: null }).then(resolve) };
     const metrics = await getDocumentScanMetrics({ from: () => chain } as never, "org-1");
     expect(metrics).toEqual({ pending: 1, retryScheduled: 1, claimed: 0, failed: 0, blocked: 1, oldestPendingAt: "2026-08-01T00:00:00.000Z", lastSuccessfulScanAt: "2026-08-01T03:00:00.000Z", averageScanDurationMs: 200 });
+    expect(filters).toContainEqual(["organization_id", "org-1"]);
     expect(JSON.stringify(metrics)).not.toContain("document-1");
   });
 

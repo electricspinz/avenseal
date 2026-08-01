@@ -16,7 +16,8 @@
     "test:integration:client-workspace": "vitest run tests/integration/client-workspace-persistence.test.ts",
     "test:e2e": "env -u NO_COLOR playwright test",
     "seed:staging": "node scripts/seed-staging.mjs",
-    "test:google-calendar": "node scripts/test-google-calendar.mjs"
+    "test:google-calendar": "node scripts/test-google-calendar.mjs",
+    "verify:document-scanner:staging": "node scripts/verify-document-scanner-staging.mjs"
   },
   "dependencies": {
     "@date-fns/tz": "1.5.0",

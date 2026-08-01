@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { CloudmersiveMalwareScanner, DocumentScannerConfigurationError, DocumentScannerProviderError, DocumentScannerTimeoutError, createDocumentMalwareScanner, createFakeMalwareScanner, normalizeDocumentScannerError, parseDocumentScannerConfiguration, validateDocumentScanRequest, withDocumentScannerTimeout } from "@/lib/server/document-security/scanner";
+import { describe, expect, it } from "vitest";
+import { CloudmersiveMalwareScanner, DocumentScannerConfigurationError, DocumentScannerProviderError, DocumentScannerTimeoutError, createDocumentMalwareScanner, createFakeMalwareScanner, normalizeDocumentScannerError, parseDocumentScannerConfiguration, validateDocumentScanRequest, withDocumentScannerTimeout, type DocumentScannerFetch } from "@/lib/server/document-security/scanner";
 
 const request = { documentId: "document-1", contentType: "application/pdf" as const, sizeBytes: 4, bytes: new Uint8Array([1, 2, 3, 4]), correlationId: "correlation-1", originalFilename: "private.pdf" };
 const validEnvironment = { DOCUMENT_SCANNER_ENABLED: "true", DOCUMENT_SCANNER_PROVIDER: "cloudmersive", DOCUMENT_SCANNER_API_KEY: "secret-api-key", DOCUMENT_SCANNER_BASE_URL: "https://api.example.test", DOCUMENT_SCANNER_TIMEOUT_MS: "45000" };
@@ -13,11 +13,9 @@ describe("document malware scanner configuration and boundary", () => {
   });
 
   it("fails closed without exposing secrets and never defaults to clean", async () => {
-    const configured = await createDocumentMalwareScanner(validEnvironment).scan(request);
     const unconfigured = await createDocumentMalwareScanner({ DOCUMENT_SCANNER_API_KEY: "private-key" }).scan(request);
-    expect(configured).toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" });
     expect(unconfigured).toEqual({ outcome: "permanent_failure", provider: "unconfigured", safeFailureCategory: "configuration_error" });
-    expect(JSON.stringify([configured, unconfigured])).not.toContain("private-key");
+    expect(JSON.stringify(unconfigured)).not.toContain("private-key");
   });
 
   it("allows a fake scanner only through explicit injection", async () => {
@@ -55,11 +53,83 @@ describe("scanner failure and timeout normalization", () => {
     await expect(withDocumentScannerTimeout(1_000, async () => new Promise<never>(() => {}))).rejects.toThrow(DocumentScannerTimeoutError);
   }, 2_000);
 
-  it("keeps the Cloudmersive skeleton unavailable until the response contract is verified and does not fetch or retry", async () => {
-    const scanner = new CloudmersiveMalwareScanner(parseDocumentScannerConfiguration(validEnvironment));
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    await expect(scanner.scan(request)).resolves.toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" });
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
+});
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
+}
+
+function scannerWith(fetchImplementation: DocumentScannerFetch) {
+  return new CloudmersiveMalwareScanner(parseDocumentScannerConfiguration(validEnvironment), fetchImplementation);
+}
+
+describe("verified Cloudmersive basic adapter", () => {
+  it("posts one private multipart request and maps a clean response", async () => {
+    const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    const fetchImplementation: DocumentScannerFetch = async (input, init) => { calls.push([input, init]); return jsonResponse({ CleanResult: true, FoundViruses: [] }); };
+    const result = await scannerWith(fetchImplementation).scan(request);
+
+    expect(result).toEqual({ outcome: "clean", provider: "cloudmersive" });
+    expect(calls).toHaveLength(1);
+    const [endpoint, init] = calls[0]!;
+    expect(String(endpoint)).toBe("https://api.example.test/virus/scan/file");
+    expect(init?.method).toBe("POST");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(new Headers(init?.headers).get("apikey")).toBe("secret-api-key");
+    const form = init?.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    const file = form.get("inputFile") as File;
+    expect(file).toBeInstanceOf(File);
+    expect(file.name).toBe("document.pdf");
+    expect(file.type).toBe("application/pdf");
+    for (const forbidden of ["documentId", "organizationId", "appointmentId", "jobId", "storageKey", "originalFilename", "correlationId"]) expect(form.get(forbidden)).toBeNull();
+    expect(JSON.stringify({ endpoint: String(endpoint), headers: Object.fromEntries(new Headers(init?.headers)), fields: [...form.keys()] })).not.toContain("private.pdf");
+  });
+
+  it("maps only CleanResult false to infected without returning detections", async () => {
+    const result = await scannerWith(async () => jsonResponse({ CleanResult: false, FoundViruses: [{ VirusName: "sensitive-detection" }] })).scan(request);
+    expect(result).toEqual({ outcome: "infected", provider: "cloudmersive" });
+    expect(JSON.stringify(result)).not.toContain("sensitive-detection");
+  });
+
+  it.each([
+    ["401", 401, { outcome: "permanent_failure", safeFailureCategory: "authentication_failed" }],
+    ["403", 403, { outcome: "permanent_failure", safeFailureCategory: "authentication_failed" }],
+    ["429", 429, { outcome: "retryable_failure", safeFailureCategory: "provider_rate_limited" }],
+    ["503", 503, { outcome: "retryable_failure", safeFailureCategory: "provider_unavailable" }],
+    ["400", 400, { outcome: "permanent_failure", safeFailureCategory: "provider_rejected" }]
+  ])("maps HTTP %s to a safe normalized result", async (_name, status, expected) => {
+    const result = await scannerWith(async () => new Response(null, { status })).scan(request);
+    expect(result).toMatchObject({ provider: "cloudmersive", ...expected });
+    expect(JSON.stringify(result)).not.toContain("secret-api-key");
+  });
+
+  it.each([
+    ["non-JSON", new Response("not JSON", { status: 200, headers: { "content-type": "text/plain" } })],
+    ["empty", new Response(null, { status: 200 })],
+    ["missing CleanResult", jsonResponse({ FoundViruses: [] })],
+    ["non-boolean CleanResult", jsonResponse({ CleanResult: "true", FoundViruses: [] })],
+    ["malformed FoundViruses", jsonResponse({ CleanResult: true, FoundViruses: {} })]
+  ])("fails closed for a %s success payload", async (_name, response) => {
+    const result = await scannerWith(async () => response).scan(request);
+    expect(result).toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" });
+  });
+
+  it("classifies abort, network, and unexpected adapter errors without retaining error text", async () => {
+    const timeout = await scannerWith(async () => { throw new DOMException("private timeout", "AbortError"); }).scan(request);
+    const network = await scannerWith(async () => { throw new TypeError("private network failure"); }).scan(request);
+    const unexpected = await scannerWith(async () => { throw new Error("private adapter failure"); }).scan(request);
+    expect(timeout).toEqual({ outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "provider_timeout" });
+    expect(network).toEqual({ outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "network_error" });
+    expect(unexpected).toEqual({ outcome: "retryable_failure", provider: "cloudmersive", safeFailureCategory: "unexpected_error" });
+    expect(JSON.stringify([timeout, network, unexpected])).not.toMatch(/private timeout|private network|private adapter/i);
+  });
+
+  it("does not fetch for invalid metadata or empty bytes", async () => {
+    let fetchCount = 0;
+    const scanner = scannerWith(async () => { fetchCount++; return jsonResponse({ CleanResult: true }); });
+    await expect(scanner.scan({ ...request, contentType: "text/plain" as never })).resolves.toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "configuration_error" });
+    await expect(scanner.scan({ ...request, bytes: new ArrayBuffer(0) })).resolves.toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" });
+    expect(fetchCount).toBe(0);
   });
 });

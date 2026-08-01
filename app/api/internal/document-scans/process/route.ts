@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerEnv } from "@/lib/env";
+import { parseDocumentScannerConfiguration } from "@/lib/server/document-security/scanner";
 import { processDocumentScanBatch } from "@/lib/server/document-security/scan-jobs";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest) {
   if (request.headers.get("origin")) return NextResponse.json({ error: "Invalid request origin." }, { status: 403, headers: { "Cache-Control": "no-store" } });
   if (!authorized(request) || !hasSupabaseServiceConfig()) return NextResponse.json({ error: "Unauthorized." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   try {
+    // Do not claim quarantined work when scanner configuration is disabled or invalid.
+    parseDocumentScannerConfiguration();
     const batchSize = Math.min(Math.max(Number(request.nextUrl.searchParams.get("batchSize")) || getServerEnv().DOCUMENT_SCAN_WORKER_BATCH_SIZE, 1), 20);
     return NextResponse.json({ result: await processDocumentScanBatch(getSupabaseAdmin(), { batchSize }) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
