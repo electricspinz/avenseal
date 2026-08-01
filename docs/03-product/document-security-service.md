@@ -244,3 +244,11 @@ Assume **1.5 scanned files per appointment** until production data exists: 100 a
 | **B2D — Operations and Staging Verification** | Health aggregates, future Mission Control projection, controlled manual retry, runbook, clean-file/EICAR/outage staging verification. |
 
 **Launch remains blocked.** Production uploads must remain pending/quarantined and non-downloadable until: a provider is selected and contractually approved; B2B/C are implemented and reviewed; worker credentials/configuration are present; staging verifies clean, blocked, outage, concurrency, and privacy paths; and Operations accepts the runbook and monitoring.
+
+## B2B implementation status
+
+**Current:** B2B provides the server-only `MalwareScanner` contract, constrained request/result types, deterministic test-only fake scanner, fail-closed configuration parser/factory, bounded timeout helper, and safe failure normalization. The factory recognizes only an explicitly enabled `cloudmersive` configuration. Missing, disabled, unsupported, invalid, or incomplete configuration yields a permanent safe failure; it never selects a fake scanner or a clean result by environment default.
+
+The implemented configuration inputs are `DOCUMENT_SCANNER_PROVIDER`, `DOCUMENT_SCANNER_ENABLED`, `DOCUMENT_SCANNER_API_KEY`, `DOCUMENT_SCANNER_BASE_URL`, and `DOCUMENT_SCANNER_TIMEOUT_MS`. The default timeout is 45 seconds and the adapter never retries: B2C owns durable retries, scan jobs, private object retrieval, document transitions, activation, and operational invocation.
+
+**Cloudmersive adapter status:** the documented virus-scan endpoint is not called yet. The official material reviewed establishes endpoint availability, but not a reviewed response DTO sufficient to map clean, infected, or suspicious results safely for notarization documents. The adapter therefore returns a deliberate fail-closed `permanent_failure` with the safe `invalid_response` category and performs no network request. It remains blocked until the provider's exact request/response contract, privacy/DPA, retention/deletion, residency, size/rate, authentication, support, and incident terms are confirmed.
