@@ -11,6 +11,41 @@ This runbook verifies the Cloudmersive basic adapter with controlled staging fix
 - Scanner variables configured in deployment secrets, not source control.
 - Operations approval and an incident owner.
 
+## Vendor, legal, and privacy approval register
+
+This register is evidence, not an approval workflow substitute. Each mandatory row must be recorded as `approved`, `rejected`, `pending`, or `not applicable` by the accountable reviewer. A pending or rejected mandatory row is a production **NO-GO**. Do not change a status based on an implementation test.
+
+| Required confirmation | Mandatory | Status | Evidence/reference | Reviewer | Date |
+| --- | --- | --- | --- | --- | --- |
+| Signed DPA or equivalent | Yes | pending | Not recorded in repository | Unassigned | — |
+| No training on submitted files | Yes | pending | Not recorded in repository | Unassigned | — |
+| No sharing beyond service delivery | Yes | pending | Not recorded in repository | Unassigned | — |
+| Retention period | Yes | pending | Not recorded in repository | Unassigned | — |
+| Deletion behavior | Yes | pending | Not recorded in repository | Unassigned | — |
+| Data residency | Yes | pending | Not recorded in repository | Unassigned | — |
+| Subprocessors | Yes | pending | Not recorded in repository | Unassigned | — |
+| Breach notification terms | Yes | pending | Not recorded in repository | Unassigned | — |
+| Support/SLA | Yes | pending | Not recorded in repository | Unassigned | — |
+| Pricing and rate limits | Yes | pending | Not recorded in repository | Unassigned | — |
+| EICAR/test-file policy | Yes | pending | Not recorded in repository | Unassigned | — |
+| API-key handling requirements | Yes | pending | Not recorded in repository | Unassigned | — |
+
+## GitHub staging environment readiness record
+
+Inspect GitHub’s **staging** environment and the staging application environment manually. Record names and readiness only—never a value, URL, token, or secret. The initial record below is intentionally unverified.
+
+| Variable or secret | Environment scope | Configured | Last verified | Verifier |
+| --- | --- | --- | --- | --- |
+| `AVENSEAL_STAGING_APP_URL` | GitHub Actions `staging` | no — unverified | — | Unassigned |
+| `DOCUMENT_SCAN_WORKER_SECRET` | GitHub Actions `staging` and staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_ENABLED` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_PROVIDER` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_API_KEY` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_BASE_URL` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_TIMEOUT_MS` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_STAGING_VERIFY` | staging app | no — unverified | — | Unassigned |
+| `DOCUMENT_SCANNER_EICAR_APPROVED` | staging app, if approved | no — unverified | — | Unassigned |
+
 ## Required variables
 
 Set names only: `DOCUMENT_SCANNER_ENABLED=true`, `DOCUMENT_SCANNER_PROVIDER=cloudmersive`, `DOCUMENT_SCANNER_API_KEY`, `DOCUMENT_SCANNER_BASE_URL`, `DOCUMENT_SCANNER_TIMEOUT_MS`, `DOCUMENT_SCANNER_STAGING_VERIFY=true`, and `DOCUMENT_SCAN_WORKER_SECRET`. Set `APP_ENV=staging` or `VERCEL_ENV=preview`.
@@ -22,7 +57,15 @@ The staging scheduler additionally uses GitHub Actions environment-scoped secret
 1. Run `pnpm verify:document-scanner:staging -- --dry-run`. It makes no network, storage, or database calls.
 2. Run `pnpm verify:document-scanner:staging` to send a generated minimal clean PDF only. Expected output is an aggregate JSON summary with `cleanCheck: "passed"`.
 3. Do not enable EICAR until the vendor contract and staging policy explicitly approve it. With approval, set `DOCUMENT_SCANNER_EICAR_APPROVED=true` for one controlled run; expect `infectedCheck: "passed"`. The runner never prints the fixture or a provider detection.
-4. End-to-end worker verification is deferred: no safe dedicated fixture-creation API exists yet. Perform it only after an approved staging fixture and cleanup procedure are reviewed.
+4. End-to-end worker verification is blocked until Operations approves a dedicated synthetic organization, appointment, document, and cleanup boundary. There is deliberately no service-role fixture script that can create or remove arbitrary customer records. Use the acceptance checklist below to review a narrowly scoped fixture before implementing or executing it.
+
+## Synthetic end-to-end fixture gate
+
+The repository does not currently contain an approved staging fixture boundary. This is intentional: adding a direct service-role script before a reviewed data-creation and cleanup contract could touch arbitrary staging records. The end-to-end clean and blocked scenarios are therefore **deferred**, not passed.
+
+Before an implementation is approved, its design must require all of the following: a dedicated synthetic organization and appointment; generated PDF/PNG/JPEG bytes only; an `example.invalid` synthetic customer; per-run, opaque fixture labels; quarantine upload before metadata persistence; one enqueue and worker call; aggregate-only evidence; and an idempotent `--cleanup-only` operation that targets only records and objects created by that fixture label. It must refuse production and require explicit staging confirmation. It must not print IDs, keys, filenames, customer data, tokens, provider payloads, or raw errors.
+
+The first approved run must verify the clean path—pending/quarantined upload, job enqueue/claim, clean transition, active storage transition, completed job, download eligibility, replay idempotency, aggregate metric movement, and cleanup. The infected path remains deferred unless EICAR is specifically approved for application-storage use.
 
 ## Expected states and cleanup
 

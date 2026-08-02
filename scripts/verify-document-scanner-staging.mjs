@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 const cleanPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
 const eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
 
@@ -38,6 +41,6 @@ export async function runDocumentScannerStagingVerification({ env = process.env,
   return { mode: "adapter-only", provider: config.provider, configurationValid: true, cleanCheck: clean.pass && clean.clean === true ? "passed" : "failed", infectedCheck: approved ? infected.pass && infected.clean === false ? "passed" : "failed" : "approval_required", workerCheck: "not_run", cleanupCheck: "not_run", overallPass: clean.pass && clean.clean === true && infected.pass && (!approved || infected.clean === false), ...(clean.pass ? {} : { failureCategory: clean.category }), ...(infected.pass ? {} : { failureCategory: infected.category }) };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   runDocumentScannerStagingVerification({ args: process.argv.slice(2) }).then((summary) => { console.log(JSON.stringify(summary)); process.exitCode = summary.overallPass ? 0 : 1; }).catch((error) => { console.log(JSON.stringify({ mode: "staging-verification", overallPass: false, failureCategory: error instanceof Error ? error.message : "unexpected_error" })); process.exitCode = 1; });
 }
