@@ -1,9 +1,22 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { runDocumentScannerStagingVerification, validateStagingScannerEnvironment } from "../../scripts/verify-document-scanner-staging.mjs";
 
 const environment = { NODE_ENV: "test", APP_ENV: "staging", DOCUMENT_SCANNER_STAGING_VERIFY: "true", DOCUMENT_SCANNER_ENABLED: "true", DOCUMENT_SCANNER_PROVIDER: "cloudmersive", DOCUMENT_SCANNER_API_KEY: "secret", DOCUMENT_SCANNER_BASE_URL: "https://scanner.example.test", DOCUMENT_SCANNER_TIMEOUT_MS: "45000" };
 
 describe("document scanner staging verification runner", () => {
+  it("executes as a CLI and returns a safe configuration failure summary", () => {
+    const result = spawnSync(process.execPath, ["scripts/verify-document-scanner-staging.mjs", "--dry-run"], {
+      cwd: process.cwd(),
+      env: { ...process.env, NODE_ENV: "test", APP_ENV: "" },
+      encoding: "utf8"
+    });
+
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({ mode: "staging-verification", overallPass: false, failureCategory: "staging_environment_required" });
+    expect(result.stdout).not.toMatch(/api[_-]?key|supabase|secret|https?:\/\//i);
+  });
+
   it("refuses unsafe or incomplete environments before any invocation", () => {
     for (const env of [{ ...environment, NODE_ENV: "production" }, { ...environment, DOCUMENT_SCANNER_STAGING_VERIFY: "false" }, { ...environment, DOCUMENT_SCANNER_ENABLED: "false" }, { ...environment, DOCUMENT_SCANNER_PROVIDER: "other" }, { ...environment, DOCUMENT_SCANNER_API_KEY: "" }, { ...environment, DOCUMENT_SCANNER_BASE_URL: "http://scanner.example.test" }]) expect(() => validateStagingScannerEnvironment(env)).toThrow();
   });
