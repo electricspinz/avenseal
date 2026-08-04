@@ -3,7 +3,7 @@ import { isValidTimezone } from "@/lib/availability";
 import { repository } from "@/lib/server/repository";
 import { getMissionControlReadinessOverview, type MissionControlReadinessOverview } from "@/lib/server/mission-control-readiness";
 
-type HealthStatus = "healthy" | "attention" | "unconfigured" | "unavailable" | "unknown";
+type HealthStatus = "healthy" | "connected" | "attention" | "needs_verification" | "manual" | "disabled" | "unconfigured" | "unavailable" | "unknown";
 
 type MissionControlRepository = Pick<typeof repository, "listAppointments" | "getSettings" | "listIntegrations" | "getCommunicationMetrics">;
 
@@ -85,6 +85,9 @@ export async function loadMissionControlViewModel(
       communicationHealth(communicationMetrics),
       reminderQueueHealth(),
       calendarHealth(integrations),
+      stripeHealth(integrations),
+      blueNotaryHealth(),
+      documentProcessingHealth(),
       aiConciergeHealth()
     ],
     settings,
@@ -155,20 +158,35 @@ function formatDate(now: Date, timezone: string) {
 }
 
 function communicationHealth(metrics: Awaited<ReturnType<MissionControlRepository["getCommunicationMetrics"]>> | null): MissionControlHealthCard {
-  if (!metrics) return { name: "Communications", status: "unknown", detail: "Communication health could not be loaded.", href: "/admin/communications", linkLabel: "Open communications" };
-  if (metrics.failed > 0) return { name: "Communications", status: "attention", detail: `${metrics.failed} failed communication${metrics.failed === 1 ? " requires" : "s require"} review.`, href: "/admin/communications", linkLabel: "Open communications" };
-  return { name: "Communications", status: "healthy", detail: "Communication metrics loaded with no failed communications.", href: "/admin/communications", linkLabel: "Open communications" };
+  if (!metrics) return { name: "Communications queue", status: "unknown", detail: "Communication queue metrics could not be loaded.", href: "/admin/communications", linkLabel: "Open communications" };
+  if (metrics.failed > 0) return { name: "Communications queue", status: "attention", detail: `${metrics.failed} failed communication${metrics.failed === 1 ? " requires" : "s require"} review.`, href: "/admin/communications", linkLabel: "Open communications" };
+  return { name: "Communications queue", status: "healthy", detail: "Queue metrics loaded with no failed communications. Scheduler delivery is verified separately.", href: "/admin/communications", linkLabel: "Open communications" };
 }
 
 function reminderQueueHealth(): MissionControlHealthCard {
-  return { name: "Reminder queue", status: "unknown", detail: "Reminder-queue health is unavailable until a dedicated repository view is available.", href: "/admin/communications", linkLabel: "Open communications" };
+  return { name: "Reminder scheduler", status: "needs_verification", detail: "Scheduler run health is not available from a durable operational source.", href: "/admin/communications", linkLabel: "Open communications" };
 }
 
 function calendarHealth(integrations: Awaited<ReturnType<MissionControlRepository["listIntegrations"]>> | null): MissionControlHealthCard {
   const calendar = integrations?.find((integration) => integration.provider === "google_calendar");
   if (!calendar) return { name: "Calendar sync", status: "unknown", detail: "Calendar integration status could not be loaded.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
-  if (calendar.status === "connected") return { name: "Calendar sync", status: "healthy", detail: "Google Calendar is connected.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
+  if (calendar.status === "connected" && calendar.lastConnectedAt) return { name: "Calendar sync", status: "connected", detail: "Google Calendar has a verified tenant-scoped connection.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
+  if (calendar.status === "connected") return { name: "Calendar sync", status: "needs_verification", detail: "Google Calendar reports connected, but no verified connection timestamp is available.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
   return { name: "Calendar sync", status: "attention", detail: "Google Calendar requires reconnection before sync can be verified.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
+}
+
+function stripeHealth(integrations: Awaited<ReturnType<MissionControlRepository["listIntegrations"]>> | null): MissionControlHealthCard {
+  const stripe = integrations?.find((integration) => integration.provider === "stripe");
+  if (!stripe || stripe.status === "disconnected") return { name: "Stripe", status: "needs_verification", detail: "Stripe Checkout is implemented, but production configuration and webhook delivery require verification.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
+  return { name: "Stripe", status: "needs_verification", detail: "Stripe configuration is recorded, but no live provider-health model verifies credentials or webhook delivery.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
+}
+
+function blueNotaryHealth(): MissionControlHealthCard {
+  return { name: "BlueNotary", status: "manual", detail: "External notarization sessions use a manual, trusted handoff from Appointment Details.", href: "/admin/appointments", linkLabel: "Open appointments" };
+}
+
+function documentProcessingHealth(): MissionControlHealthCard {
+  return { name: "Document processing", status: "disabled", detail: "Awaiting vendor and legal approval.", href: "/admin/appointments", linkLabel: "Open appointments" };
 }
 
 function aiConciergeHealth(): MissionControlHealthCard {

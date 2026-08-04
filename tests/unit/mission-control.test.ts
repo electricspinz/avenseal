@@ -22,7 +22,7 @@ function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>
   return {
     listAppointments: () => overrides.appointments ?? Promise.resolve([]),
     getSettings: () => overrides.settings ?? Promise.resolve(settings),
-    listIntegrations: () => overrides.integrations ?? Promise.resolve([{ provider: "google_calendar", status: "connected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }]),
+    listIntegrations: () => overrides.integrations ?? Promise.resolve([{ provider: "google_calendar", status: "connected", accountLabel: null, lastConnectedAt: "2026-07-28T12:00:00.000Z", lastSyncedAt: null, lastError: null }]),
     getCommunicationMetrics: () => overrides.metrics ?? Promise.resolve(metrics)
   };
 }
@@ -69,10 +69,29 @@ describe("Mission Control view model", () => {
     expect(attention.systemHealth[0].status).toBe("attention");
   });
 
-  it("uses the integration status for calendar health", async () => {
+  it("uses a verified tenant-scoped connection record for calendar health", async () => {
+    const connected = await loadMissionControlViewModel(source());
     const viewModel = await loadMissionControlViewModel(source({ integrations: Promise.resolve([{ provider: "google_calendar", status: "disconnected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }]) }));
 
+    expect(connected.systemHealth[2].status).toBe("connected");
     expect(viewModel.systemHealth[2].status).toBe("attention");
+  });
+
+  it("does not infer a verified calendar connection or Stripe connectivity from incomplete integration data", async () => {
+    const viewModel = await loadMissionControlViewModel(source({ integrations: Promise.resolve([
+      { provider: "google_calendar", status: "connected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null },
+      { provider: "stripe", status: "connected", accountLabel: "Stripe", lastConnectedAt: null, lastSyncedAt: null, lastError: null }
+    ]) }));
+
+    expect(viewModel.systemHealth[2].status).toBe("needs_verification");
+    expect(viewModel.systemHealth[3].status).toBe("needs_verification");
+  });
+
+  it("identifies the manual BlueNotary handoff and disabled document processing without exposing queue details", async () => {
+    const viewModel = await loadMissionControlViewModel(source());
+
+    expect(viewModel.systemHealth[4]).toMatchObject({ name: "BlueNotary", status: "manual" });
+    expect(viewModel.systemHealth[5]).toEqual(expect.objectContaining({ name: "Document processing", status: "disabled", detail: "Awaiting vendor and legal approval." }));
   });
 
   it("marks calendar health unknown when its integration source fails", async () => {

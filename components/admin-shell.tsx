@@ -9,11 +9,10 @@ const nav = [
   ["Appointments", "/admin/appointments", icons.calendar],
   ["Communications", "/admin/communications", icons.clock],
   ["Payments", "/admin/payments", icons.clock],
-  ["Documents", "/admin/documents", icons.clock],
-  ["Workflows", "/admin/workflows", icons.clock],
   ["Aven", "/admin/copilot", icons.monitor],
   ["Customers", "/admin/customers", icons.users],
-  ["Settings", "/admin/settings", icons.lock]
+  ["Settings", "/admin/settings", icons.lock],
+  ["Integrations", "/admin/settings/integrations", icons.monitor]
 ] as const;
 
 export function AdminShell({ children, active }: { children: React.ReactNode; active: string }) {
