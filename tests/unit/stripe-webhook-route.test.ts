@@ -36,6 +36,7 @@ function checkoutEvent(overrides: Record<string, unknown> = {}) {
         object: "checkout.session",
         id: "cs_trusted",
         payment_intent: "pi_trusted",
+        payment_status: "paid",
         metadata: {
           organization_id: "organization-attacker",
           appointment_id: "appointment-attacker"
@@ -75,7 +76,7 @@ describe("Stripe webhook route", () => {
 
     const first = await POST(signedRequest(checkoutEvent()));
     const replay = await POST(signedRequest(checkoutEvent({
-      data: { object: { object: "checkout.session", id: "cs_trusted", payment_intent: "pi_trusted", metadata: { organization_id: "organization-other", appointment_id: "appointment-other" } } }
+      data: { object: { object: "checkout.session", id: "cs_trusted", payment_intent: "pi_trusted", payment_status: "paid", metadata: { organization_id: "organization-other", appointment_id: "appointment-other" } } }
     })));
 
     expect(first.status).toBe(200);
@@ -104,11 +105,31 @@ describe("Stripe webhook route", () => {
   });
 
   it("acknowledges unrelated and stale payment events without invoking the payment workflow", async () => {
-    for (const type of ["customer.created", "checkout.session.expired", "payment_intent.payment_failed"]) {
+    for (const type of ["customer.created", "checkout.session.expired", "payment_intent.payment_failed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed"]) {
       const response = await POST(signedRequest(checkoutEvent({ type })));
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ received: true, ignored: true });
     }
+    expect(mocks.confirmPaymentFromStripe).not.toHaveBeenCalled();
+  });
+
+  it.each(["unpaid", "no_payment_required", "processing"])("does not finalize a Checkout Session with payment_status=%s", async (paymentStatus) => {
+    const response = await POST(signedRequest(checkoutEvent({
+      data: { object: { object: "checkout.session", id: "cs_trusted", payment_intent: "pi_trusted", payment_status: paymentStatus } }
+    })));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ received: true, ignored: true });
+    expect(mocks.confirmPaymentFromStripe).not.toHaveBeenCalled();
+  });
+
+  it("does not finalize a Checkout Session that omits payment_status", async () => {
+    const response = await POST(signedRequest(checkoutEvent({
+      data: { object: { object: "checkout.session", id: "cs_trusted", payment_intent: "pi_trusted" } }
+    })));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ received: true, ignored: true });
     expect(mocks.confirmPaymentFromStripe).not.toHaveBeenCalled();
   });
 
@@ -125,7 +146,7 @@ describe("Stripe webhook route", () => {
   it("safely acknowledges an unknown payment according to the repository result", async () => {
     mocks.confirmPaymentFromStripe.mockResolvedValue({ ignored: true });
 
-    const response = await POST(signedRequest(checkoutEvent({ data: { object: { object: "checkout.session", id: "cs_unknown", payment_intent: "pi_unknown" } } })));
+    const response = await POST(signedRequest(checkoutEvent({ data: { object: { object: "checkout.session", id: "cs_unknown", payment_intent: "pi_unknown", payment_status: "paid" } } })));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ received: true, result: { ignored: true } });

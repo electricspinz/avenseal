@@ -1,0 +1,33 @@
+import type React from "react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/components/public-shell", () => ({ PublicShell: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("@/components/brand", () => ({ Brand: () => null }));
+vi.mock("@/components/button", () => ({ ButtonLink: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("@/components/icons", () => ({ icons: { check: () => null } }));
+vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
+import ConfirmationPage from "@/app/booking/confirmation/page";
+
+describe("booking confirmation payment return copy", () => {
+  it("does not treat payment=success as proof of a confirmed payment", async () => {
+    render(await ConfirmationPage({ searchParams: Promise.resolve({ payment: "success" }) }));
+
+    expect(screen.getByRole("heading", { name: "We’re confirming your payment." })).toBeTruthy();
+    expect(screen.getByText(/being confirmed securely/i)).toBeTruthy();
+    expect(screen.queryByText(/payment has been confirmed/i)).toBeNull();
+  });
+
+  it("states that a cancelled checkout did not confirm a payment", async () => {
+    render(await ConfirmationPage({ searchParams: Promise.resolve({ payment: "cancelled" }) }));
+
+    expect(screen.getByRole("heading", { name: "Checkout was cancelled." })).toBeTruthy();
+    expect(screen.getByText(/No payment was confirmed/i)).toBeTruthy();
+  });
+
+  it("preserves the normal booking confirmation when no payment return is present", async () => {
+    render(await ConfirmationPage({ searchParams: Promise.resolve({}) }));
+
+    expect(screen.getByRole("heading", { name: "Thank you. Your request was received." })).toBeTruthy();
+  });
+});

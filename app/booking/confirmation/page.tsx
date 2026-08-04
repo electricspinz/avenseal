@@ -1,12 +1,25 @@
+import React from "react";
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { ButtonLink } from "@/components/button";
 import { icons } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
 
-export default async function ConfirmationPage({ searchParams }: { searchParams: Promise<{ reference?: string }> }) {
-  const { reference } = await searchParams;
+export default async function ConfirmationPage({ searchParams }: { searchParams: Promise<{ reference?: string; payment?: string }> }) {
+  const { reference, payment } = await searchParams;
   const displayReference = reference?.trim() || "Sent securely by email";
+  const isCancelledCheckout = payment === "cancelled";
+  const isPaymentReturn = payment === "success";
+  const heading = isCancelledCheckout
+    ? "Checkout was cancelled."
+    : isPaymentReturn
+      ? "We’re confirming your payment."
+      : "Thank you. Your request was received.";
+  const message = isCancelledCheckout
+    ? "No payment was confirmed. You can return to your appointment when you are ready to try again."
+    : isPaymentReturn
+      ? "Your payment is being confirmed securely. Your appointment status will update after confirmation is complete."
+      : "A commissioned notary will review your request and make all notarial determinations during the session.";
 
   return (
     <PublicShell>
@@ -20,9 +33,9 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
               <div className="grid h-16 w-16 place-items-center rounded-full bg-emeraldAction/12 text-emeraldAction">
                 <icons.check size={34} strokeWidth={1.8} />
               </div>
-              <h1 className="mt-7 text-4xl font-semibold tracking-tight text-navy sm:text-5xl">Thank you. Your request was received.</h1>
+              <h1 className="mt-7 text-4xl font-semibold tracking-tight text-navy sm:text-5xl">{heading}</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slateDeep">
-                A commissioned notary will review your request and make all notarial determinations during the session.
+                {message}
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <ButtonLink href="/appointments/status" className="min-h-12 sm:min-w-60">Check Appointment Status</ButtonLink>

@@ -1316,6 +1316,26 @@ export const repository = {
       return { ignored: true };
     }
 
+    // A PaymentIntent event is proof only for the payment record that already
+    // owns that processor identifier. A session match alone must not let a
+    // different PaymentIntent confirm the appointment.
+    if (
+      input.paymentIntentId &&
+      payment.stripe_payment_intent_id &&
+      input.paymentIntentId !== payment.stripe_payment_intent_id
+    ) {
+      await supabase.from("payment_events").insert({
+        organization_id: payment.organization_id,
+        payment_id: payment.id,
+        provider: "stripe",
+        provider_event_id: input.providerEventId,
+        event_type: input.eventType,
+        processing_status: "ignored",
+        safe_summary: "Payment identifiers did not match."
+      });
+      return { ignored: true };
+    }
+
     const organizationId = String(payment.organization_id);
     if (existing.data) {
       await supabase.from("payment_events").update({ processing_status: "received", processed_at: null, safe_summary: "Payment event retrying." }).eq("id", existing.data.id);
@@ -1340,10 +1360,22 @@ export const repository = {
       .single();
     if (appointmentError) throw appointmentError;
     const appointment = mapAppointment(appointmentRow);
-    await supabase
+    // This is the payment-level idempotency boundary. PostgreSQL applies the
+    // status predicate and update atomically, so only one Stripe success event
+    // can win the local paid transition and execute its downstream workflow.
+    const { data: finalizedPayment, error: finalizeError } = await supabase
       .from("appointment_payments")
       .update({ status: "paid", paid_at: new Date().toISOString(), stripe_payment_intent_id: input.paymentIntentId ?? payment.stripe_payment_intent_id })
-      .eq("id", payment.id);
+      .eq("id", payment.id)
+      .eq("organization_id", organizationId)
+      .in("status", ["payment_link_created", "payment_processing"])
+      .select("id")
+      .maybeSingle();
+    if (finalizeError) throw finalizeError;
+    if (!finalizedPayment) {
+      await supabase.from("payment_events").update({ processing_status: "processed", processed_at: new Date().toISOString(), safe_summary: "Payment was already finalized." }).eq("provider", "stripe").eq("provider_event_id", input.providerEventId);
+      return { duplicate: true };
+    }
     if (appointment.status !== "confirmed") {
       await supabase
         .from("appointment_requests")

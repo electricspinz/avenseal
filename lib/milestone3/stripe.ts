@@ -33,6 +33,10 @@ export async function createStripeCheckoutSession(input: {
   body.set("success_url", input.successUrl);
   body.set("cancel_url", input.cancelUrl);
   body.set("customer_email", input.customerEmail);
+  // Version 1 deliberately accepts card payments only. This keeps Checkout
+  // confirmation synchronous; adding delayed methods requires the matching
+  // async Checkout webhook workflow before it can be enabled.
+  body.set("payment_method_types[0]", "card");
   body.set("line_items[0][quantity]", String(input.lineItem.quantity));
   body.set("line_items[0][price_data][currency]", input.lineItem.currency);
   body.set("line_items[0][price_data][unit_amount]", String(input.lineItem.amountCents));

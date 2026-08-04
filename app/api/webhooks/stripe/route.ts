@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
   const object = event.data?.object ?? {};
 
   try {
-    if (type === "checkout.session.completed" || type === "payment_intent.succeeded") {
+    const isPaidCheckoutSession = type === "checkout.session.completed" && object.payment_status === "paid";
+    if (isPaidCheckoutSession || type === "payment_intent.succeeded") {
       const result = await repository.confirmPaymentFromStripe({
         providerEventId: String(event.id),
         eventType: type,
