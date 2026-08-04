@@ -8,8 +8,13 @@ export default function AdminLoginPage() {
         <Brand />
         <h1 className="mt-8 text-3xl font-semibold">Admin Sign In</h1>
         <p className="mt-2 text-sm leading-6 text-slateDeep">
-          Supabase authentication is configured through environment variables. Local development uses protected mock screens for workflow verification.
+          Sign in with your authorized Avenseal administrator account.
         </p>
+        {process.env.NODE_ENV !== "production" && (
+          <p className="mt-2 text-sm leading-6 text-slateDeep">
+            Local development may use protected workflow-verification screens when Supabase is not configured.
+          </p>
+        )}
         <AdminLoginForm />
       </section>
     </main>

@@ -26,7 +26,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams?
   const integrations = await repository.listIntegrations();
   const googleMessage = params?.google ? resultMessages[params.google] : null;
   return (
-    <AdminShell active="Settings">
+    <AdminShell active="Integrations">
       <h1 className="text-3xl font-semibold text-navy">Integrations</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slateDeep">
         Owner/admin controls for production integrations. Credentials remain server-side and are never displayed here.

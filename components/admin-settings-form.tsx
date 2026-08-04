@@ -1,6 +1,7 @@
 "use client";
 
 import type React from "react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/button";
 import { weekdays } from "@/lib/availability";
@@ -186,7 +187,7 @@ export function AdminSettingsForm({ settings }: { settings: OrganizationSettings
         <Toggle label="Automatic approval enabled" checked={form.automaticApprovalEnabled} onChange={(value) => update("automaticApprovalEnabled", value)} />
       </Section>
 
-      <Section title="Services and Pricing" description="Stored in minor currency units. Stripe is intentionally not connected in this sprint.">
+      <Section title="Services and Pricing" description="Stored in minor currency units. Stripe Checkout and payment reconciliation are implemented; production configuration still requires verification.">
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="Customer-facing service name"><input className="admin-input" value={form.serviceCustomerName} onChange={(event) => update("serviceCustomerName", event.target.value)} /></Field>
           <Field label="Base price in cents"><input type="number" className="admin-input" value={form.serviceBasePriceCents} onChange={(event) => update("serviceBasePriceCents", event.target.value)} placeholder="Needs configuration" /></Field>
@@ -197,7 +198,7 @@ export function AdminSettingsForm({ settings }: { settings: OrganizationSettings
         </div>
       </Section>
 
-      <Section title="Communications" description="Configuration only. No email or SMS is sent by Sprint 2.">
+      <Section title="Communications" description="Email queueing, reminders, retries, and the Communications Center are implemented. Delivery health depends on the configured SMTP service and scheduler.">
         <div className="grid gap-4 lg:grid-cols-3">
           <Field label="Sender name"><input className="admin-input" value={form.senderName} onChange={(event) => update("senderName", event.target.value)} /></Field>
           <Field label="Reply-to email"><input className="admin-input" value={form.replyToEmail} onChange={(event) => update("replyToEmail", event.target.value)} /></Field>
@@ -232,14 +233,24 @@ export function AdminSettingsForm({ settings }: { settings: OrganizationSettings
         </div>
       </Section>
 
-      <Section title="Integrations" description="Future service boundaries are visible but inactive.">
-        <div className="grid gap-4 md:grid-cols-3">
-          {["Stripe payments", "Google Calendar", "BlueNotary"].map((name) => (
-            <div key={name} className="rounded-lg border border-dashed border-silver bg-mist p-4">
-              <h3 className="font-semibold text-navy">{name}</h3>
-              <p className="mt-2 text-sm text-slateDeep">Coming Soon</p>
-            </div>
-          ))}
+      <Section title="Integrations" description="Current production capabilities and their operational entry points.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <IntegrationCard title="Google Calendar">
+            OAuth connection and calendar synchronization are available for this organization.
+            <IntegrationLink href="/admin/settings/integrations">Manage Google Calendar</IntegrationLink>
+          </IntegrationCard>
+          <IntegrationCard title="Stripe">
+            Checkout and payment reconciliation are implemented. Confirm production credentials, key mode, and webhook delivery before treating Stripe as live.
+            <IntegrationLink href="/admin/settings/integrations">Review integration status</IntegrationLink>
+          </IntegrationCard>
+          <IntegrationCard title="Communications">
+            Email queueing, reminders, retries, and delivery records are available. Scheduler delivery should be verified separately.
+            <IntegrationLink href="/admin/communications">Open Communications Center</IntegrationLink>
+          </IntegrationCard>
+          <IntegrationCard title="BlueNotary">
+            Version 1 uses a manual, trusted external-session handoff. Manage sessions from Appointment Details; no BlueNotary API connection is implied.
+            <IntegrationLink href="/admin/appointments">Open appointments</IntegrationLink>
+          </IntegrationCard>
         </div>
       </Section>
 
@@ -303,4 +314,17 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
+}
+
+function IntegrationCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-silver bg-mist p-4">
+      <h3 className="font-semibold text-navy">{title}</h3>
+      <div className="mt-2 space-y-3 text-sm leading-6 text-slateDeep">{children}</div>
+    </div>
+  );
+}
+
+function IntegrationLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return <Link href={href} className="focus-ring inline-block font-semibold text-emeraldAction underline underline-offset-4">{children}</Link>;
 }
