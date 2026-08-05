@@ -47,6 +47,20 @@ describe("Communications Center", () => {
     expect(document.body.textContent).not.toContain("reference_number");
   });
 
+  it("exposes a retry form only for failed records with a backing communication message", () => {
+    const failed = { id: "m:communication-1", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: record.messageType, channel: "email" as const, status: "failed" as const, provider: null, occurredAt: record.createdAt, safeSummary: "Communication delivery failed.", source: "message" as const, messageId: "communication-1" };
+    const { rerender } = render(<CommunicationList records={[failed]} timezone="America/New_York" />);
+    const retries = screen.getAllByRole("button", { name: "Retry delivery" });
+    expect(retries).toHaveLength(2);
+    for (const retry of retries) {
+      expect(retry.closest("form")?.getAttribute("action")).toBe("/api/admin/communications/communication-1/retry");
+      expect(retry.closest("form")?.getAttribute("method")).toBe("post");
+    }
+
+    rerender(<CommunicationList records={[{ ...failed, status: "sent" }]} timezone="America/New_York" />);
+    expect(screen.queryAllByRole("button", { name: "Retry delivery" })).toHaveLength(0);
+  });
+
   it("renders the route-level loading and safe error states", () => {
     const { rerender } = render(<CommunicationsLoadingState />);
     expect(screen.getByRole("status", { name: "Loading Communications Center" })).toBeTruthy();
