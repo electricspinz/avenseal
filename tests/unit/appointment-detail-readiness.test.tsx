@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getAppointment: vi.fn(),
   getHistory: vi.fn().mockResolvedValue([]),
+  getSettings: vi.fn().mockResolvedValue({ business: { timezone: "America/New_York" } }),
   getNotes: vi.fn().mockResolvedValue([]),
   listPayments: vi.fn().mockResolvedValue([]),
   listCalendarEvents: vi.fn().mockResolvedValue([]),
   listCommunications: vi.fn().mockResolvedValue([]),
   getExternalSession: vi.fn().mockResolvedValue(null),
   getClientWorkspaceAccessMetadata: vi.fn().mockResolvedValue(null),
+  listAppointmentRescheduleHistory: vi.fn().mockResolvedValue([]),
   calculate: vi.fn(),
   notFound: vi.fn(() => { throw new Error("NOT_FOUND"); })
 }));
@@ -29,6 +31,7 @@ vi.mock("@/components/customer-timeline", () => ({ CustomerTimeline: () => <div 
 vi.mock("@/components/external-session-card", () => ({ ExternalSessionCard: () => <div /> }));
 vi.mock("@/components/client-workspace-access-card", () => ({ ClientWorkspaceAccessCard: () => <div /> }));
 vi.mock("@/components/admin-appointment-documents-card", () => ({ AdminAppointmentDocumentsCard: () => <div /> }));
+vi.mock("@/components/admin-appointment-reschedule", () => ({ AdminAppointmentReschedule: () => <div /> }));
 
 import AppointmentDetailPage from "@/app/admin/appointments/[id]/page";
 

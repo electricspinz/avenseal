@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmailIfConfigured, type EmailDeliveryResult } from "@/lib/server/email";
 import { isCustomerVisibleExternalSession, type ExternalSession } from "@/lib/server/external-sessions";
 
-export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "external_session_available" | "document_replacement_requested" | "documents_approved" | "appointment_updated" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
+export type CommunicationTemplate = "booking_confirmation" | "payment_required" | "payment_confirmed" | "external_session_available" | "document_replacement_requested" | "documents_approved" | "appointment_updated" | "appointment_rescheduled" | "appointment_cancelled" | "admin_booking_notification" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
 
 export type QueuedEmail = {
   organizationId: string;
