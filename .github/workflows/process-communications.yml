@@ -17,8 +17,9 @@ jobs:
     name: Process reminders and communications
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: production
     env:
-      AVENSEAL_APP_URL: ${{ secrets.AVENSEAL_APP_URL }}
+      AVENSEAL_APP_URL: ${{ vars.AVENSEAL_APP_URL }}
       COMMUNICATION_PROCESSOR_SECRET: ${{ secrets.COMMUNICATION_PROCESSOR_SECRET }}
 
     steps:
