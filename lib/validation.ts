@@ -79,9 +79,23 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 export const adminUpdateSchema = z.object({
   status: z.enum(appointmentStatuses).optional(),
   serviceId: z.string().uuid().optional(),
-  preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  preferredTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   note: text(1000).optional()
+});
+
+const isCalendarDate = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+};
+
+const isClockTime = (value: string) => {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+};
+
+export const adminRescheduleSchema = z.object({
+  preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate, "Enter a valid date."),
+  preferredTime: z.string().regex(/^\d{2}:\d{2}$/).refine(isClockTime, "Enter a valid time.")
 });
 
 export const paymentLinkSchema = z.object({

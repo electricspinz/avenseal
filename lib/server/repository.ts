@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/appointment-availability";
 import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
 import {
+  appointmentDateTimeRange,
   retryPendingCalendarSyncs,
   synchronizeAppointmentCalendar
 } from "@/lib/server/google-calendar-sync";
@@ -976,6 +977,92 @@ export const repository = {
       await synchronizeCalendarAfterSave(organizationId, id);
     }
     return mapped;
+  },
+  async rescheduleAppointment(input: { appointmentId: string; organizationId: string; actorUserId: string; preferredDate: string; preferredTime: string }) {
+    const previous = await repository.getAppointment(input.appointmentId);
+    if (!previous || previous.organizationId !== input.organizationId) throw new Error("Appointment not found.");
+    if (!previous.serviceId) throw new Error("This legacy appointment cannot be safely rescheduled.");
+
+    const requestedTime = normalizeTime(input.preferredTime);
+    const availability = await getAvailableAppointmentSlots({
+      organizationId: input.organizationId,
+      serviceId: previous.serviceId,
+      date: input.preferredDate,
+      excludeAppointmentId: previous.id
+    });
+    if (!availability.slots.some((slot) => localTimeForAppointmentSlot(slot.startAt, availability.timezone) === requestedTime)) {
+      throw new Error("Selected appointment time is outside current availability.");
+    }
+
+    if (!hasSupabaseServiceConfig()) {
+      const appointment = await devStore.updateAppointment(previous.id, { preferredDate: input.preferredDate, preferredTime: requestedTime });
+      return { appointment, calendarSyncStatus: "skipped" as const };
+    }
+
+    const { data, error } = await getSupabaseAdmin().rpc("reschedule_admin_appointment", {
+      p_organization_id: input.organizationId,
+      p_appointment_id: previous.id,
+      p_preferred_date: input.preferredDate,
+      p_preferred_time: requestedTime,
+      p_actor_user_id: input.actorUserId
+    });
+    if (error) throw new Error("The appointment could not be rescheduled.");
+    const appointment = await repository.getAppointment(previous.id);
+    if (!appointment) throw new Error("The appointment could not be rescheduled.");
+
+    const settings = await loadOrganizationSettings();
+    const range = appointmentDateTimeRange({
+      preferredDate: appointment.preferredDate,
+      preferredTime: appointment.preferredTime,
+      timezone: settings.business.timezone,
+      serviceDurationMinutesSnapshot: appointment.serviceDurationMinutesSnapshot,
+      defaultDurationMinutes: settings.rules.defaultDurationMinutes
+    });
+    await cancelAppointmentReminders(getSupabaseAdmin(), appointment.id);
+    await scheduleAppointmentReminders(getSupabaseAdmin(), {
+      organizationId: appointment.organizationId,
+      appointmentId: appointment.id,
+      startsAt: new Date(range.startsAt),
+      settings: settings.communications
+    });
+
+    const rescheduleCount = Number((data as Array<{ reschedule_count?: unknown }> | null)?.[0]?.reschedule_count ?? 0);
+    await enqueueAndProcessEmail(getSupabaseAdmin(), {
+      organizationId: appointment.organizationId,
+      appointmentId: appointment.id,
+      customerId: appointment.customerId,
+      type: "appointment_rescheduled",
+      recipient: appointment.customer.email,
+      subject: renderEmailSubject("appointment_rescheduled", settings.business.businessName),
+      html: renderEmailTemplate({
+        greetingName: appointment.customer.fullName,
+        body: `Your appointment has been rescheduled to ${appointment.preferredDate} at ${appointment.preferredTime} (${settings.business.timezone}).`,
+        footer: `Questions? Contact ${settings.business.supportEmail}${settings.business.supportPhone ? ` or ${settings.business.supportPhone}` : ""}.`
+      }),
+      idempotencyDiscriminator: `reschedule:${rescheduleCount}`
+    });
+
+    const calendar = await synchronizeCalendarAfterSave(appointment.organizationId, appointment.id);
+    return { appointment, calendarSyncStatus: calendar?.status ?? "skipped" as const };
+  },
+  async listAppointmentRescheduleHistory(organizationId: string, appointmentId: string) {
+    if (!hasSupabaseServiceConfig()) return [] as Array<{ id: string; actorUserId: string | null; createdAt: string; previousDate: string; previousTime: string; preferredDate: string; preferredTime: string; timezone: string }>;
+    const { data, error } = await getSupabaseAdmin().from("audit_logs")
+      .select("id,actor_user_id,created_at,metadata")
+      .eq("organization_id", organizationId)
+      .eq("entity_type", "appointment_request")
+      .eq("entity_id", appointmentId)
+      .eq("action", "appointment.rescheduled")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => {
+      const metadata = row.metadata as Record<string, unknown>;
+      return {
+        id: String(row.id), actorUserId: typeof row.actor_user_id === "string" ? row.actor_user_id : null, createdAt: String(row.created_at),
+        previousDate: String(metadata.previousDate ?? ""), previousTime: String(metadata.previousTime ?? ""),
+        preferredDate: String(metadata.preferredDate ?? ""), preferredTime: String(metadata.preferredTime ?? ""), timezone: String(metadata.timezone ?? "")
+      };
+    });
   },
   async listCustomers() {
     if (!hasSupabaseServiceConfig()) return devStore.listCustomers();
