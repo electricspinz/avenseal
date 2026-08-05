@@ -14,7 +14,7 @@ describe("communications scheduler workflow", () => {
   });
 
   it("validates secret configuration, normalizes an HTTPS app URL, and uses repository secrets", () => {
-    expect(workflow).toContain("secrets.AVENSEAL_APP_URL");
+    expect(workflow).toContain("vars.AVENSEAL_APP_URL");
     expect(workflow).toContain("secrets.COMMUNICATION_PROCESSOR_SECRET");
     expect(workflow).toContain('app_url="${AVENSEAL_APP_URL%/}"');
     expect(workflow).toContain('[[ ! "$app_url" =~ ^https:// ]]');
