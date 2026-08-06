@@ -2,37 +2,48 @@ import { icons } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button";
 import { repository } from "@/lib/server/repository";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Remote Online Notary Appointments",
+  description: "Request a Florida remote online notary appointment with clear preparation, secure payment checkout, and a provider-hosted online session.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "Avenseal | Remote Online Notary Appointments",
+    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
+    url: "/"
+  }
+};
 
 const trust = [
-  ["Commissioned Florida Remote Online Notary", icons.user],
-  ["Same-Day Appointments", icons.calendar],
-  ["Secure Online Session", icons.lock],
-  ["Clear Pricing", icons.tag]
+  ["Commissioned Florida Notary", icons.user],
+  ["Clear appointment preparation", icons.calendar],
+  ["Secure payment checkout", icons.lock],
+  ["Provider-hosted online sessions", icons.monitor]
 ] as const;
 
 const faqs = [
-  "What is a Florida remote online notary?",
-  "What do I need for my appointment?",
-  "How long does an appointment take?",
-  "When will I receive my notarized document?"
+  "What should I prepare for my appointment?",
+  "Who performs identity verification?",
+  "Does Avenseal conduct the notarization session?",
+  "Can Avenseal provide legal advice?"
 ];
 
 const howItWorks = [
   {
-    title: "Schedule",
-    body: "Choose a requested appointment time that works for you. Same-day appointments may be available.",
+    title: "Request and schedule",
+    body: "Choose a requested appointment time and share the details needed for review.",
     Icon: icons.calendar
   },
   {
-    title: "Meet Online",
-    body: "Join your secure online session with a commissioned Florida notary.",
+    title: "Complete identity verification",
+    body: "Identity verification takes place with the online notarization provider before the remote session.",
     Icon: icons.monitor
   },
   {
-    title: "Complete",
-    body: "Review, sign, and notarize your documents during the session.",
+    title: "Join the online session",
+    body: "Meet through the provider-hosted session with a commissioned notary.",
     Icon: icons.fileCheck
   }
 ];
@@ -46,14 +57,14 @@ export default async function HomePage() {
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 md:grid-cols-[0.95fr_1.05fr] md:py-24 lg:px-8">
           <div>
             <h1 className="max-w-2xl text-5xl font-semibold leading-[1.03] tracking-normal text-navy md:text-6xl">
-              Need a Document Notarized Online?
+              Remote online notary appointments, coordinated clearly.
             </h1>
             <p className="mt-6 max-w-xl text-xl leading-8 text-slateDeep">
-              Book a same-day appointment with a commissioned Florida remote online notary.
+              Request your Florida remote online notary appointment, prepare with confidence, and join the provider-hosted session with a commissioned notary.
             </p>
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <ButtonLink href="/book">Schedule Appointment</ButtonLink>
-              <ButtonLink href="/how-it-works" variant="secondary">How It Works</ButtonLink>
+              <ButtonLink href="/book">Request an Appointment</ButtonLink>
+              <ButtonLink href="/how-it-works" variant="secondary">See How It Works</ButtonLink>
             </div>
           </div>
           <HeroSessionIllustration />
@@ -94,12 +105,13 @@ export default async function HomePage() {
       <section className="bg-white py-20">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 md:grid-cols-2 lg:px-8">
           <div>
-            <h2 className="text-4xl font-semibold leading-tight text-navy">Same-Day Appointments. Real People. Real Convenience.</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-emeraldAction">Why choose Avenseal</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight text-navy">A clear path from appointment request to online session.</h2>
             <p className="mt-5 text-lg leading-8 text-slateDeep">
-              We make getting your documents notarized simple and calm. Book online, meet with a commissioned Florida remote online notary, and finish with confidence, often in just one appointment.
+              Avenseal keeps the administrative steps organized: request an appointment, review pricing, complete payment when available, and prepare for the provider-hosted remote session.
             </p>
             <ul className="mt-7 space-y-3 text-sm font-medium text-slateDeep">
-              {["Flexible appointment windows", "No printing or scanning in many cases", "Customers can request appointments from anywhere", "Questions are reviewed by people"].map((item) => (
+              {["Appointment requests are reviewed before the session", "Preparation guidance stays connected to your appointment", "Secure appointment access is delivered through a protected link", "A commissioned notary makes all notarial determinations"].map((item) => (
                 <li key={item} className="flex items-center gap-3">
                   <span className="text-emeraldAction">✓</span>
                   {item}
@@ -107,7 +119,7 @@ export default async function HomePage() {
               ))}
             </ul>
           </div>
-          <div className="rounded-lg border border-silver bg-white p-4 shadow-quiet">
+          <div aria-hidden="true" className="rounded-lg border border-silver bg-white p-4 shadow-quiet">
             <div className="aspect-[4/3] rounded-md bg-mist p-8">
               <div className="mx-auto flex h-full max-w-md flex-col justify-between rounded-md border border-navy/20 bg-white p-5 shadow-sm">
                 <div className="flex items-center gap-3 border-b border-silver pb-4">
@@ -135,14 +147,14 @@ export default async function HomePage() {
       <section className="bg-mist py-20">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="text-center">
-            <h2 className="text-4xl font-semibold text-navy">Transparent Pricing Preview</h2>
+            <h2 className="text-4xl font-semibold text-navy">Service and pricing overview</h2>
             <p className="mt-3 text-slateDeep">{settings.business.pricingHeadline}</p>
           </div>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {[
-              [service?.customerName ?? "Remote online notarization appointment", service?.basePriceCents === null || !service ? "Needs configuration" : formatPrice(service.basePriceCents, service.currency), service?.description ?? settings.business.pricingNote],
-              ["Additional notarizations", "Shown before confirmation", "Configured by organization settings later"],
-              ["Witness coordination review", "Shown before confirmation", "When witness questions require review"]
+              [service?.customerName ?? "Remote online notarization appointment", service?.basePriceCents === null || !service ? "Pricing shared before checkout" : formatPrice(service.basePriceCents, service.currency), service?.description ?? settings.business.pricingNote],
+              ["Appointment preparation", "Included in your appointment flow", "Review your appointment workspace as details become available"],
+              ["Online notarization provider", "Provider-hosted session", "Identity verification and the remote session take place through the provider"]
             ].map(([title, line, note]) => (
               <div key={title} className="rounded-lg border border-silver bg-white p-8 text-center">
                 <icons.file className="mx-auto text-navy" size={34} strokeWidth={1.5} />
@@ -164,9 +176,7 @@ export default async function HomePage() {
               {faqs.map((question) => (
                 <details key={question} className="group p-5">
                   <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold text-navy">{question}</summary>
-                  <p className="mt-3 text-sm leading-6 text-slateDeep">
-                    A commissioned notary will review your request and make all notarial determinations during the session.
-                  </p>
+                  <p className="mt-3 text-sm leading-6 text-slateDeep">Avenseal coordinates your appointment request and preparation. A commissioned notary makes all notarial determinations during the provider-hosted session.</p>
                 </details>
               ))}
             </div>
@@ -181,9 +191,9 @@ export default async function HomePage() {
           <div className="flex flex-col items-start justify-between gap-6 rounded-lg bg-navy p-8 text-white md:flex-row md:items-center">
             <div>
               <h2 className="text-2xl font-semibold">Ready to get started?</h2>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/74">Book your same-day appointment with a commissioned Florida remote online notary.</p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-white/74">Request a Florida remote online notary appointment and receive clear next steps for preparation.</p>
             </div>
-            <ButtonLink href="/book">Schedule Appointment</ButtonLink>
+            <ButtonLink href="/book">Request an Appointment</ButtonLink>
           </div>
         </div>
       </section>
@@ -197,7 +207,7 @@ function formatPrice(cents: number, currency: string) {
 
 function HeroSessionIllustration() {
   return (
-    <div className="relative mx-auto w-full max-w-xl">
+    <div aria-hidden="true" className="relative mx-auto w-full max-w-xl">
       <div className="absolute right-0 top-4 h-72 w-72 rounded-full border border-silver/80" aria-hidden="true" />
       <div className="relative rounded-lg border border-silver bg-white p-4 shadow-quiet">
         <div className="rounded-md bg-mist p-5">
