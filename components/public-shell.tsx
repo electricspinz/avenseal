@@ -11,9 +11,10 @@ export function PublicHeader() {
           <Link className="focus-ring rounded-md" href="/how-it-works">How It Works</Link>
           <Link className="focus-ring rounded-md" href="/pricing">Pricing</Link>
           <Link className="focus-ring rounded-md" href="/faq">FAQ</Link>
-          <ButtonLink href="/book" className="px-5">Schedule Appointment</ButtonLink>
+          <Link className="focus-ring rounded-md" href="/about">About</Link>
+          <ButtonLink href="/book" className="px-5">Request Appointment</ButtonLink>
         </nav>
-        <ButtonLink href="/book" className="md:hidden">Schedule</ButtonLink>
+        <ButtonLink href="/book" className="md:hidden">Request</ButtonLink>
       </div>
     </header>
   );
@@ -26,15 +27,15 @@ export function PublicFooter() {
         <div>
           <Brand dark />
           <p className="mt-5 max-w-xs text-sm leading-6 text-white/72">
-            Avenseal provides remote online notary appointment support for Florida customers.
+            Avenseal helps customers request, prepare for, and manage Florida remote online notary appointments.
           </p>
         </div>
-        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["FAQ", "/faq"], ["Schedule Appointment", "/book"]]} />
+        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["About", "/about"], ["FAQ", "/faq"]]} />
         <FooterGroup title="Support" links={[["Check Appointment Status", "/appointments/status"], ["Contact Us", "/contact"]]} />
         <FooterGroup title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"]]} />
       </div>
       <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">
-        © 2026 Avenseal. Privacy and terms content is pending legal review.
+        © 2026 Avenseal. Privacy and terms pages are draft materials pending legal review.
       </div>
     </footer>
   );

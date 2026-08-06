@@ -1,8 +1,19 @@
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button";
 import { repository } from "@/lib/server/repository";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Pricing",
+  description: "Review the current pricing information for Avenseal remote online notary appointment services before you request an appointment.",
+  alternates: { canonical: "/pricing" },
+  openGraph: {
+    title: "Avenseal Pricing",
+    description: "Review current pricing information for remote online notary appointment services.",
+    url: "/pricing"
+  }
+};
 
 export default async function PricingPage() {
   const settings = await repository.getOrganizationSettings();

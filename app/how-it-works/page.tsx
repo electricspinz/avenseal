@@ -1,5 +1,17 @@
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "How It Works",
+  description: "Understand how to request an Avenseal appointment, complete provider identity verification, and join a commissioned notary online.",
+  alternates: { canonical: "/how-it-works" },
+  openGraph: {
+    title: "How Remote Online Notary Appointments Work",
+    description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary.",
+    url: "/how-it-works"
+  }
+};
 
 export default function HowItWorksPage() {
   return (
@@ -8,9 +20,9 @@ export default function HowItWorksPage() {
         <h1 className="text-5xl font-semibold text-navy">How It Works</h1>
         <div className="mt-10 space-y-8">
           {[
-            ["Request an appointment", "Tell us the basic administrative details needed to prepare for review."],
-            ["A notary reviews your request", "A commissioned notary will review your request and make all notarial determinations during the session."],
-            ["Meet online", "Join from a quiet, well-lit location with your government-issued ID ready."]
+            ["Request and schedule", "Share the administrative details needed for appointment review and select a requested time."],
+            ["Complete identity verification", "Identity verification takes place with the online notarization provider before the remote session."],
+            ["Join the online session", "Meet through the provider-hosted session with a commissioned notary. Bring your government-issued ID and follow the notary’s instructions."]
           ].map(([title, body], index) => (
             <div key={title} className="border-l-2 border-emeraldAction pl-6">
               <p className="text-sm font-semibold text-slateDeep">Step {index + 1}</p>
@@ -24,4 +36,3 @@ export default function HowItWorksPage() {
     </PublicShell>
   );
 }
-
