@@ -71,6 +71,19 @@ export type AdminAppointmentRescheduleDiagnosticCategory =
   | "rpc_tenant_or_appointment_mismatch"
   | "rpc_reservation_transition_failed"
   | "rpc_audit_insert_failed"
+  | "rpc_function_or_signature_missing"
+  | "rpc_undefined_column"
+  | "rpc_undefined_table"
+  | "rpc_permission_denied"
+  | "rpc_ambiguous_column"
+  | "rpc_not_null_violation"
+  | "rpc_foreign_key_violation"
+  | "rpc_unique_violation"
+  | "rpc_check_violation"
+  | "rpc_invalid_input"
+  | "rpc_datetime_failure"
+  | "rpc_cardinality_violation"
+  | "rpc_uncategorized_raise"
   | "unknown_rpc_validation_failure"
   | "rpc_not_found"
   | "communication_failed"
@@ -96,6 +109,26 @@ const rescheduleRpcDiagnosticCategories = {
 
 const rescheduleRpcDiagnosticFields = ["message", "details", "hint", "code"] as const;
 
+// Temporary, non-sensitive production diagnostics. This deliberately classifies
+// only exact PostgreSQL/PostgREST codes after approved SQL tokens are checked.
+const rescheduleRpcDiagnosticCodeCategories = {
+  "42883": "rpc_function_or_signature_missing",
+  PGRST202: "rpc_function_or_signature_missing",
+  "42703": "rpc_undefined_column",
+  "42P01": "rpc_undefined_table",
+  "42501": "rpc_permission_denied",
+  "42702": "rpc_ambiguous_column",
+  "23502": "rpc_not_null_violation",
+  "23503": "rpc_foreign_key_violation",
+  "23505": "rpc_unique_violation",
+  "23514": "rpc_check_violation",
+  "22P02": "rpc_invalid_input",
+  "22007": "rpc_datetime_failure",
+  "22008": "rpc_datetime_failure",
+  "21000": "rpc_cardinality_violation",
+  P0001: "rpc_uncategorized_raise"
+} as const satisfies Record<string, AdminAppointmentRescheduleDiagnosticCategory>;
+
 export function mapAdminAppointmentRescheduleRpcDiagnostic(error: unknown): AdminAppointmentRescheduleDiagnosticCategory {
   if (typeof error !== "object" || error === null) return "unknown_rpc_validation_failure";
   const fields = error as Record<string, unknown>;
@@ -106,6 +139,10 @@ export function mapAdminAppointmentRescheduleRpcDiagnostic(error: unknown): Admi
       const exactToken = new RegExp(`(?:^|[^A-Za-z0-9_])${token}(?:$|[^A-Za-z0-9_])`);
       if (exactToken.test(value)) return category;
     }
+  }
+  const code = typeof fields.code === "string" ? fields.code : null;
+  if (code && Object.prototype.hasOwnProperty.call(rescheduleRpcDiagnosticCodeCategories, code)) {
+    return rescheduleRpcDiagnosticCodeCategories[code as keyof typeof rescheduleRpcDiagnosticCodeCategories];
   }
   return "unknown_rpc_validation_failure";
 }
