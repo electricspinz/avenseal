@@ -56,10 +56,52 @@ type SupabaseRow = Record<string, unknown>;
 
 export type AdminAppointmentRescheduleDiagnosticCategory =
   | "availability_preflight_failed"
-  | "rpc_validation_failed"
+  | "rpc_invalid_schedule_input"
+  | "rpc_inactive_or_unconfigured_organization"
+  | "rpc_availability_schedule_missing"
+  | "rpc_invalid_dst_local_time"
+  | "rpc_minimum_notice_violation"
+  | "rpc_same_day_booking_disallowed"
+  | "rpc_beyond_booking_horizon"
+  | "rpc_blocked_exception"
+  | "rpc_outside_availability_interval"
+  | "rpc_daily_limit_reached"
+  | "rpc_appointment_overlap"
+  | "rpc_reservation_overlap"
+  | "rpc_tenant_or_appointment_mismatch"
+  | "rpc_reservation_transition_failed"
+  | "rpc_audit_insert_failed"
+  | "unknown_rpc_validation_failure"
   | "rpc_not_found"
   | "communication_failed"
   | "unexpected_database_error";
+
+const rescheduleRpcDiagnosticCategories = {
+  AVENSEAL_RESCHEDULE_INVALID_SCHEDULE_INPUT: "rpc_invalid_schedule_input",
+  AVENSEAL_RESCHEDULE_INACTIVE_OR_UNCONFIGURED_ORGANIZATION: "rpc_inactive_or_unconfigured_organization",
+  AVENSEAL_RESCHEDULE_AVAILABILITY_SCHEDULE_MISSING: "rpc_availability_schedule_missing",
+  AVENSEAL_RESCHEDULE_INVALID_DST_LOCAL_TIME: "rpc_invalid_dst_local_time",
+  AVENSEAL_RESCHEDULE_MINIMUM_NOTICE: "rpc_minimum_notice_violation",
+  AVENSEAL_RESCHEDULE_SAME_DAY_DISALLOWED: "rpc_same_day_booking_disallowed",
+  AVENSEAL_RESCHEDULE_BEYOND_BOOKING_HORIZON: "rpc_beyond_booking_horizon",
+  AVENSEAL_RESCHEDULE_BLOCKED_EXCEPTION: "rpc_blocked_exception",
+  AVENSEAL_RESCHEDULE_OUTSIDE_AVAILABILITY_INTERVAL: "rpc_outside_availability_interval",
+  AVENSEAL_RESCHEDULE_DAILY_LIMIT_REACHED: "rpc_daily_limit_reached",
+  AVENSEAL_RESCHEDULE_APPOINTMENT_OVERLAP: "rpc_appointment_overlap",
+  AVENSEAL_RESCHEDULE_RESERVATION_OVERLAP: "rpc_reservation_overlap",
+  AVENSEAL_RESCHEDULE_TENANT_OR_APPOINTMENT_MISMATCH: "rpc_tenant_or_appointment_mismatch",
+  AVENSEAL_RESCHEDULE_RESERVATION_TRANSITION_FAILED: "rpc_reservation_transition_failed",
+  AVENSEAL_RESCHEDULE_AUDIT_INSERT_FAILED: "rpc_audit_insert_failed"
+} as const satisfies Record<string, AdminAppointmentRescheduleDiagnosticCategory>;
+
+export function mapAdminAppointmentRescheduleRpcDiagnostic(error: unknown): AdminAppointmentRescheduleDiagnosticCategory {
+  const message = typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+    ? error.message
+    : null;
+  return message && message in rescheduleRpcDiagnosticCategories
+    ? rescheduleRpcDiagnosticCategories[message as keyof typeof rescheduleRpcDiagnosticCategories]
+    : "unknown_rpc_validation_failure";
+}
 
 export class AdminAppointmentRescheduleDiagnosticError extends Error {
   constructor(
@@ -1032,8 +1074,8 @@ export const repository = {
       });
       if (result.error) throw result.error;
       data = result.data;
-    } catch {
-      throw new AdminAppointmentRescheduleDiagnosticError("rpc_validation_failed", "The appointment could not be rescheduled.");
+    } catch (error) {
+      throw new AdminAppointmentRescheduleDiagnosticError(mapAdminAppointmentRescheduleRpcDiagnostic(error), "The appointment could not be rescheduled.");
     }
     const appointment = await repository.getAppointment(previous.id);
     if (!appointment) throw new AdminAppointmentRescheduleDiagnosticError("rpc_not_found", "The appointment could not be rescheduled.");
