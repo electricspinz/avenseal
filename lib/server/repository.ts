@@ -94,13 +94,20 @@ const rescheduleRpcDiagnosticCategories = {
   AVENSEAL_RESCHEDULE_AUDIT_INSERT_FAILED: "rpc_audit_insert_failed"
 } as const satisfies Record<string, AdminAppointmentRescheduleDiagnosticCategory>;
 
+const rescheduleRpcDiagnosticFields = ["message", "details", "hint", "code"] as const;
+
 export function mapAdminAppointmentRescheduleRpcDiagnostic(error: unknown): AdminAppointmentRescheduleDiagnosticCategory {
-  const message = typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
-    ? error.message
-    : null;
-  return message && message in rescheduleRpcDiagnosticCategories
-    ? rescheduleRpcDiagnosticCategories[message as keyof typeof rescheduleRpcDiagnosticCategories]
-    : "unknown_rpc_validation_failure";
+  if (typeof error !== "object" || error === null) return "unknown_rpc_validation_failure";
+  const fields = error as Record<string, unknown>;
+  for (const field of rescheduleRpcDiagnosticFields) {
+    const value = typeof fields[field] === "string" ? fields[field] : null;
+    if (!value) continue;
+    for (const [token, category] of Object.entries(rescheduleRpcDiagnosticCategories)) {
+      const exactToken = new RegExp(`(?:^|[^A-Za-z0-9_])${token}(?:$|[^A-Za-z0-9_])`);
+      if (exactToken.test(value)) return category;
+    }
+  }
+  return "unknown_rpc_validation_failure";
 }
 
 export class AdminAppointmentRescheduleDiagnosticError extends Error {

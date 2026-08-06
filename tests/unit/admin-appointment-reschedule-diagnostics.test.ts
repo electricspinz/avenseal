@@ -31,6 +31,32 @@ describe("admin appointment reschedule SQL diagnostics", () => {
     }
   });
 
+  it("extracts an exact approved token from supported PostgREST error fields", () => {
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: "P0001: AVENSEAL_RESCHEDULE_MINIMUM_NOTICE" })).toBe("rpc_minimum_notice_violation");
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: null, details: "AVENSEAL_RESCHEDULE_APPOINTMENT_OVERLAP", hint: null, code: "P0001" })).toBe("rpc_appointment_overlap");
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: null, details: null, hint: "AVENSEAL_RESCHEDULE_RESERVATION_OVERLAP", code: "P0001" })).toBe("rpc_reservation_overlap");
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: "unrecognized", details: null, hint: null, code: "AVENSEAL_RESCHEDULE_AUDIT_INSERT_FAILED" })).toBe("rpc_audit_insert_failed");
+  });
+
+  it("rejects unknown and partial strings without preserving raw database text", () => {
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: "AVENSEAL_RESCHEDULE_MINIMUM_NOTIC" })).toBe("unknown_rpc_validation_failure");
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({ message: "prefixAVENSEAL_RESCHEDULE_MINIMUM_NOTICE" })).toBe("unknown_rpc_validation_failure");
+    const raw = "database failure containing customer@example.com and internal details";
+    const category = mapAdminAppointmentRescheduleRpcDiagnostic({ message: raw });
+    expect(category).toBe("unknown_rpc_validation_failure");
+    expect(category).not.toContain("customer");
+    expect(category).not.toContain("internal");
+  });
+
+  it("uses a later supported field only when it contains an approved token", () => {
+    expect(mapAdminAppointmentRescheduleRpcDiagnostic({
+      message: "unapproved database text",
+      details: "unapproved details",
+      hint: "AVENSEAL_RESCHEDULE_OUTSIDE_AVAILABILITY_INTERVAL",
+      code: "P0001"
+    })).toBe("rpc_outside_availability_interval");
+  });
+
   it("fails closed for unknown database errors without preserving their content", () => {
     const raw = "database failure containing customer@example.com and internal details";
     const category = mapAdminAppointmentRescheduleRpcDiagnostic({ message: raw });
