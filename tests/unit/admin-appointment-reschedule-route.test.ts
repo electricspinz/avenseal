@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { createAdminAppointmentRescheduleHandler } from "@/app/api/admin/appointments/[id]/reschedule/handler";
+import { AdminAppointmentRescheduleDiagnosticError } from "@/lib/server/repository";
 import type { RateLimitPolicy, RateLimitResult } from "@/lib/server/distributed-rate-limit";
 
 const context = { userId: "admin-1", email: "admin@example.com", organizationId: "org-1", role: "admin" as const };
@@ -55,5 +56,16 @@ describe("admin appointment reschedule route", () => {
     expect(test.getAppointment).not.toHaveBeenCalled();
     expect(test.reschedule).not.toHaveBeenCalled();
   });
-});
 
+  it("preserves generic browser JSON when a safe RPC diagnostic is logged", async () => {
+    const error = new AdminAppointmentRescheduleDiagnosticError("rpc_appointment_overlap", "The appointment could not be rescheduled.");
+    const test = harness({ reschedule: vi.fn().mockRejectedValue(error) });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await test.handle(request({ preferredDate: "2026-08-20", preferredTime: "11:00" }), params());
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Appointment rescheduling is unavailable." });
+    expect(log).toHaveBeenCalledWith("[admin-reschedule]", { category: "rpc_appointment_overlap" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("appointment-1");
+    log.mockRestore();
+  });
+});
