@@ -1,5 +1,8 @@
 import { PublicShell } from "@/components/public-shell";
 import { StatusLinkRequestForm } from "@/components/status-link-request-form";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default function AppointmentStatusRequestPage() {
   return (

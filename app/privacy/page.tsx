@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Privacy Policy Draft",
   description: "Avenseal’s privacy-policy draft is pending legal review and is not a final published policy.",
   alternates: { canonical: "/privacy" },
+  robots: { index: false, follow: false },
   openGraph: {
     title: "Avenseal Privacy Policy Draft",
     description: "This privacy-policy draft is pending legal review.",

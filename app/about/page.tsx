@@ -10,6 +10,11 @@ export const metadata: Metadata = {
     title: "About Avenseal",
     description: "Avenseal coordinates remote online notary appointment requests, preparation, and secure customer access.",
     url: "/about"
+  },
+  twitter: {
+    card: "summary",
+    title: "About Avenseal",
+    description: "Learn how Avenseal coordinates remote online notary appointment requests, payment, and preparation."
   }
 };
 

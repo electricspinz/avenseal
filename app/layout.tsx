@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://avenseal.com"),
+  metadataBase: new URL("https://www.avenseal.com"),
   title: {
     default: "Avenseal | Remote Online Notary Appointments",
     template: "%s | Avenseal"
@@ -14,6 +14,11 @@ export const metadata: Metadata = {
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
     url: "/"
+  },
+  twitter: {
+    card: "summary",
+    title: "Avenseal | Remote Online Notary Appointments",
+    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session."
   }
 };
 

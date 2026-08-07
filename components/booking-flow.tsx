@@ -296,7 +296,7 @@ export function BookingFlow({
           <Brand dark />
           <h1 className="mt-12 text-3xl font-semibold leading-tight">Remote Online Notary Appointments Made Simple</h1>
           <div className="mt-12 space-y-7 text-sm text-white/78">
-            <Assurance icon={icons.lock} title="Privacy first" body="No document contents or sensitive ID details are collected." />
+            <Assurance icon={icons.lock} title="Clear information handling" body="Share only the information requested for your appointment." />
             <Assurance icon={icons.user} title="Human review" body="Every request is reviewed by a commissioned notary." />
             <Assurance icon={icons.fileCheck} title="Clear preparation" body="Know what to have ready before the session." />
           </div>

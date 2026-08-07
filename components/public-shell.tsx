@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { ButtonLink } from "@/components/button";
+import { PublicMobileNavigation } from "@/components/public-mobile-navigation";
 
 export function PublicHeader() {
   return (
@@ -14,7 +15,7 @@ export function PublicHeader() {
           <Link className="focus-ring rounded-md" href="/about">About</Link>
           <ButtonLink href="/book" className="px-5">Request Appointment</ButtonLink>
         </nav>
-        <ButtonLink href="/book" className="md:hidden">Request</ButtonLink>
+        <PublicMobileNavigation />
       </div>
     </header>
   );
@@ -34,9 +35,7 @@ export function PublicFooter() {
         <FooterGroup title="Support" links={[["Check Appointment Status", "/appointments/status"], ["Contact Us", "/contact"]]} />
         <FooterGroup title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"]]} />
       </div>
-      <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">
-        © 2026 Avenseal. Privacy and terms pages are draft materials pending legal review.
-      </div>
+      <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">© 2026 Avenseal.</div>
     </footer>
   );
 }
