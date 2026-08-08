@@ -1,16 +1,23 @@
 # Referral Partner Script
 
-## Short introduction
+## Phone introduction
 
-“Avenseal helps customers schedule and prepare for an online notarization appointment. We coordinate booking, payment, temporary pre-session documents, and communications. The actual notarial act is performed by a commissioned Florida online notary through BlueNotary.”
+“Avenseal helps clients schedule and prepare for an online notarization appointment. We coordinate scheduling, payment, secure pre-session document upload, Client Workspace access, and customer communications. A commissioned Florida online notary performs the actual notarization through BlueNotary. We focus on a clear, professional client experience.”
 
-## Guardrails
+## Email introduction
 
-- Do not promise availability, identity verification, acceptance, legal effect, or completion.
-- Do not provide legal advice or recommend document changes.
-- State only the disclosed notarial fee; do not describe unapproved partner compensation.
-- Direct support questions to appointments@avenseal.com.
+**Subject:** A clear online notarization appointment path for your clients
 
-## Follow-up
+“Avenseal provides appointment coordination for clients who need an online notarization appointment: scheduling, payment, secure pre-session document upload, Client Workspace access, and communications. The commissioned Florida online notary uses BlueNotary for the actual remote session. We do not provide legal advice or promise an outcome. If helpful, we can share approved booking and preparation information for your clients.”
 
-Offer the approved public booking link only after legal/public pages and production launch are approved. Record partner arrangements through approved business channels, not customer records.
+## Follow-up email
+
+“Thank you for your time. Attached or linked materials should describe only the approved Avenseal appointment process. Please direct clients with legal, identity, or notarial-eligibility questions to the appropriate qualified professional. Support: appointments@avenseal.com.”
+
+## Leave-behind one-page summary
+
+- Avenseal: scheduling, payment, secure pre-session document upload, Client Workspace, and communications.
+- Commissioned Florida online notary: independent notarial decisions and the notarial act.
+- BlueNotary: RON platform/session.
+- Customer value: clear scheduling and preparation, transparent disclosed fee, and professional support.
+- Guardrails: no legal advice, no promised result, no unapproved partner compensation.
