@@ -1,4 +1,4 @@
-import type React from "react";
+import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,8 @@ import { metadata as statusMetadata } from "@/app/appointments/status/page";
 import { metadata as accessRequestMetadata } from "@/app/appointments/access/request/page";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
+
+(globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 describe("public launch readiness", () => {
   it("provides an accessible mobile menu with the approved public routes", () => {
