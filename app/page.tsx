@@ -13,6 +13,11 @@ export const metadata: Metadata = {
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
     url: "/"
+  },
+  twitter: {
+    card: "summary",
+    title: "Avenseal | Remote Online Notary Appointments",
+    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session."
   }
 };
 
@@ -24,11 +29,11 @@ const trust = [
 ] as const;
 
 const faqs = [
-  "What should I prepare for my appointment?",
-  "Who performs identity verification?",
-  "Does Avenseal conduct the notarization session?",
-  "Can Avenseal provide legal advice?"
-];
+  ["Can Avenseal tell me what notarial act I need?", "No. The software does not select notarial acts, certificates, or provide legal advice."],
+  ["Should I sign before the appointment?", "No. Do not sign your document until instructed by the notary."],
+  ["How is identity verification completed?", "Identity verification occurs through the online notarization provider as part of preparing for the remote session."],
+  ["Does Avenseal conduct the notarization session?", "No. Avenseal coordinates appointment requests, payment, and preparation. The remote notarization session is hosted by the online notarization provider and completed with a commissioned notary."]
+] as const;
 
 const howItWorks = [
   {
@@ -108,7 +113,7 @@ export default async function HomePage() {
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-emeraldAction">Why choose Avenseal</p>
             <h2 className="mt-3 text-4xl font-semibold leading-tight text-navy">A clear path from appointment request to online session.</h2>
             <p className="mt-5 text-lg leading-8 text-slateDeep">
-              Avenseal keeps the administrative steps organized: request an appointment, review pricing, complete payment when available, and prepare for the provider-hosted remote session.
+              Avenseal keeps the administrative steps organized: request an appointment, review pricing, complete payment, and prepare for the provider-hosted remote session.
             </p>
             <ul className="mt-7 space-y-3 text-sm font-medium text-slateDeep">
               {["Appointment requests are reviewed before the session", "Preparation guidance stays connected to your appointment", "Secure appointment access is delivered through a protected link", "A commissioned notary makes all notarial determinations"].map((item) => (
@@ -148,11 +153,11 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="text-center">
             <h2 className="text-4xl font-semibold text-navy">Service and pricing overview</h2>
-            <p className="mt-3 text-slateDeep">{settings.business.pricingHeadline}</p>
+            <p className="mt-3 text-slateDeep">Current pricing is shared before payment is requested.</p>
           </div>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {[
-              [service?.customerName ?? "Remote online notarization appointment", service?.basePriceCents === null || !service ? "Pricing shared before checkout" : formatPrice(service.basePriceCents, service.currency), service?.description ?? settings.business.pricingNote],
+              [service?.customerName ?? "Appointment pricing", service?.basePriceCents === null || !service ? "Shared before payment" : formatPrice(service.basePriceCents, service.currency), service?.description ?? "Current service pricing is provided before payment is requested."],
               ["Appointment preparation", "Included in your appointment flow", "Review your appointment workspace as details become available"],
               ["Online notarization provider", "Provider-hosted session", "Identity verification and the remote session take place through the provider"]
             ].map(([title, line, note]) => (
@@ -164,7 +169,6 @@ export default async function HomePage() {
               </div>
             ))}
           </div>
-          <p className="mt-5 text-center text-xs text-slateDeep">{settings.business.pricingNote}</p>
         </div>
       </section>
 
@@ -173,17 +177,17 @@ export default async function HomePage() {
           <div>
             <h2 className="text-3xl font-semibold text-navy">Frequently Asked Questions</h2>
             <div className="mt-7 divide-y divide-silver rounded-lg border border-silver">
-              {faqs.map((question) => (
+              {faqs.map(([question, answer]) => (
                 <details key={question} className="group p-5">
                   <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold text-navy">{question}</summary>
-                  <p className="mt-3 text-sm leading-6 text-slateDeep">Avenseal coordinates your appointment request and preparation. A commissioned notary makes all notarial determinations during the provider-hosted session.</p>
+                  <p className="mt-3 text-sm leading-6 text-slateDeep">{answer}</p>
                 </details>
               ))}
             </div>
           </div>
           <div className="grid place-items-center rounded-lg bg-mist p-10">
             <div className="grid h-32 w-32 place-items-center rounded-md border border-navy/25 bg-white text-emeraldAction">
-              <icons.fileCheck size={58} strokeWidth={1.4} />
+              <icons.fileCheck size={58} strokeWidth={1.4} aria-hidden="true" />
             </div>
           </div>
         </div>

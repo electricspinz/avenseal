@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Terms of Service Draft",
   description: "Avenseal’s terms-of-service draft is pending legal review and is not a final published agreement.",
   alternates: { canonical: "/terms" },
+  robots: { index: false, follow: false },
   openGraph: {
     title: "Avenseal Terms of Service Draft",
     description: "This terms-of-service draft is pending legal review.",

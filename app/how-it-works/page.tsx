@@ -10,6 +10,11 @@ export const metadata: Metadata = {
     title: "How Remote Online Notary Appointments Work",
     description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary.",
     url: "/how-it-works"
+  },
+  twitter: {
+    card: "summary",
+    title: "How Remote Online Notary Appointments Work",
+    description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary."
   }
 };
 
@@ -31,7 +36,7 @@ export default function HowItWorksPage() {
             </div>
           ))}
         </div>
-        <ButtonLink href="/book" className="mt-10">Schedule Appointment</ButtonLink>
+        <ButtonLink href="/book" className="mt-10">Request an Appointment</ButtonLink>
       </section>
     </PublicShell>
   );

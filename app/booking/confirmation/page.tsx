@@ -4,6 +4,9 @@ import { Brand } from "@/components/brand";
 import { ButtonLink } from "@/components/button";
 import { icons } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function ConfirmationPage({ searchParams }: { searchParams: Promise<{ reference?: string; payment?: string }> }) {
   const { reference, payment } = await searchParams;
