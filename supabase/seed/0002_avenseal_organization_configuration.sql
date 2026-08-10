@@ -82,7 +82,7 @@ values (
   '00000000-0000-4000-8000-000000000001',
   'remote_online_notarization',
   'Remote online notarization appointment',
-  'Pricing is configurable and should be finalized before public launch.',
+  'Current service pricing is provided before payment is requested.',
   null,
   'USD',
   30,

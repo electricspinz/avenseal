@@ -4,7 +4,19 @@ import { PublicShell } from "@/components/public-shell";
 export const metadata: Metadata = {
   title: "Terms of Service | Avenseal",
   description: "Avenseal's Terms of Service.",
-  alternates: { canonical: "/terms" }
+  alternates: { canonical: "/terms" },
+  openGraph: {
+    title: "Terms of Service | Avenseal",
+    description: "Read Avenseal's Terms of Service.",
+    url: "/terms",
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Terms of Service | Avenseal",
+    description: "Read Avenseal's Terms of Service.",
+    images: ["/brand/avenseal-og-social.png"]
+  }
 };
 
 const effectiveDate = "August 9, 2026";

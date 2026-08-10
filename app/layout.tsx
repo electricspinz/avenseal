@@ -1,6 +1,18 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "Avenseal",
+  legalName: "Avenseal LLC",
+  url: "https://www.avenseal.com",
+  telephone: "+1-727-433-8565",
+  email: "appointments@avenseal.com",
+  description: "Avenseal coordinates Florida remote online notary appointment requests, payments, preparation, and customer-facing appointment access.",
+  openingHours: "Mo-Fr 09:30-17:30"
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.avenseal.com"),
   title: {
@@ -13,19 +25,27 @@ export const metadata: Metadata = {
     siteName: "Avenseal",
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
-    url: "/"
+    url: "/",
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Avenseal | Remote Online Notary Appointments",
-    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session."
+    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
+    images: ["/brand/avenseal-og-social.png"]
+  },
+  icons: {
+    icon: "/icon.svg"
   }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
+        {children}
+      </body>
     </html>
   );
 }
