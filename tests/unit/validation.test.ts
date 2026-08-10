@@ -21,8 +21,8 @@ const validBooking = {
   urgency: "same_day",
   administrativeNotes: "Please review.",
   consentAccepted: true,
-  privacyPolicyVersion: "legal-review-placeholder-2026-07",
-  termsVersion: "legal-review-placeholder-2026-07"
+  privacyPolicyVersion: "privacy-policy-2026-08-09",
+  termsVersion: "terms-of-service-2026-08-09"
 };
 
 describe("bookingSchema", () => {

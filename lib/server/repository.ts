@@ -279,8 +279,8 @@ function mapBusiness(org: SupabaseRow, settings: SupabaseRow): BusinessSettings 
     defaultDeliveryMethod: String(settings.default_delivery_method ?? org.default_delivery_method ?? "remote_online_notarization") as BusinessSettings["defaultDeliveryMethod"],
     pricingHeadline: String(settings.pricing_headline ?? "Clear pricing shown before your appointment is confirmed."),
     pricingNote: String(settings.pricing_note ?? "Pricing content is awaiting business approval."),
-    privacyPolicyVersion: String(settings.privacy_policy_version ?? "legal-review-placeholder-2026-07"),
-    termsVersion: String(settings.terms_version ?? "legal-review-placeholder-2026-07")
+    privacyPolicyVersion: String(settings.privacy_policy_version ?? "privacy-policy-2026-08-09"),
+    termsVersion: String(settings.terms_version ?? "terms-of-service-2026-08-09")
   };
 }
 

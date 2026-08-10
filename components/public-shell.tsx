@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { ButtonLink } from "@/components/button";
-import { PublicMobileNavigation } from "@/components/public-mobile-navigation";
 
 export function PublicHeader() {
   return (
@@ -12,10 +11,9 @@ export function PublicHeader() {
           <Link className="focus-ring rounded-md" href="/how-it-works">How It Works</Link>
           <Link className="focus-ring rounded-md" href="/pricing">Pricing</Link>
           <Link className="focus-ring rounded-md" href="/faq">FAQ</Link>
-          <Link className="focus-ring rounded-md" href="/about">About</Link>
-          <ButtonLink href="/book" className="px-5">Request Appointment</ButtonLink>
+          <ButtonLink href="/book" className="px-5">Schedule Appointment</ButtonLink>
         </nav>
-        <PublicMobileNavigation />
+        <ButtonLink href="/book" className="md:hidden">Schedule</ButtonLink>
       </div>
     </header>
   );
@@ -28,14 +26,16 @@ export function PublicFooter() {
         <div>
           <Brand dark />
           <p className="mt-5 max-w-xs text-sm leading-6 text-white/72">
-            Avenseal helps customers request, prepare for, and manage Florida remote online notary appointments.
+            Avenseal provides remote online notary appointment support for Florida customers.
           </p>
         </div>
-        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["About", "/about"], ["FAQ", "/faq"]]} />
+        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["FAQ", "/faq"], ["Schedule Appointment", "/book"]]} />
         <FooterGroup title="Support" links={[["Check Appointment Status", "/appointments/status"], ["Contact Us", "/contact"]]} />
         <FooterGroup title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"]]} />
       </div>
-      <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">© 2026 Avenseal.</div>
+      <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">
+        © 2026 Avenseal. All rights reserved.
+      </div>
     </footer>
   );
 }

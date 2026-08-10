@@ -66,8 +66,8 @@ export const bookingSchema = z
     consentAccepted: z.literal(true, {
       errorMap: () => ({ message: "Consent is required before submitting." })
     }),
-    privacyPolicyVersion: z.string().default("legal-review-placeholder-2026-07"),
-    termsVersion: z.string().default("legal-review-placeholder-2026-07")
+    privacyPolicyVersion: z.string().default("privacy-policy-2026-08-09"),
+    termsVersion: z.string().default("terms-of-service-2026-08-09")
   })
   .refine((data) => data.notarizationsNotSure || !!data.estimatedNotarizations, {
     path: ["estimatedNotarizations"],
