@@ -20,8 +20,8 @@ values (
   '(407) 555-0100',
   'Clear pricing shown before your appointment is confirmed.',
   'Pricing content is awaiting business approval.',
-  'legal-review-placeholder-2026-07',
-  'legal-review-placeholder-2026-07',
+  'privacy-policy-2026-08-09',
+  'terms-of-service-2026-08-09',
   'America/New_York'
 )
 on conflict (organization_id) do nothing;
@@ -33,4 +33,3 @@ values
   ('00000000-0000-4000-8000-000000000001', 3, '09:00', '17:00', 30),
   ('00000000-0000-4000-8000-000000000001', 4, '09:00', '17:00', 30),
   ('00000000-0000-4000-8000-000000000001', 5, '09:00', '17:00', 30);
-

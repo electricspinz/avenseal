@@ -54,9 +54,15 @@ describe("public launch readiness", () => {
     expect(robots()).toMatchObject({ host: "https://www.avenseal.com", sitemap: "https://www.avenseal.com/sitemap.xml", rules: { allow: "/" } });
   });
 
-  it("keeps utility, contact, and draft legal routes out of indexing", () => {
-    for (const metadata of [contactMetadata, privacyMetadata, termsMetadata, bookMetadata, confirmationMetadata, portalMetadata, statusMetadata, accessRequestMetadata]) {
+  it("keeps utility and contact routes out of indexing", () => {
+    for (const metadata of [contactMetadata, bookMetadata, confirmationMetadata, portalMetadata, statusMetadata, accessRequestMetadata]) {
       expect(metadata.robots).toEqual({ index: false, follow: false });
+    }
+  });
+
+  it("does not mark finalized legal policies as noindex", () => {
+    for (const metadata of [privacyMetadata, termsMetadata]) {
+      expect(metadata.robots).not.toEqual({ index: false, follow: false });
     }
   });
 
