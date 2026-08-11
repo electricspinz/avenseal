@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -36,7 +36,7 @@ export default function HowItWorksPage() {
             </div>
           ))}
         </div>
-        <ButtonLink href="/book" className="mt-10">Request an Appointment</ButtonLink>
+        <TrackedScheduleAppointmentButtonLink href="/book" location="how_it_works" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
   );

@@ -1,6 +1,7 @@
 import { icons } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import { repository } from "@/lib/server/repository";
 import type { Metadata } from "next";
 
@@ -68,8 +69,8 @@ export default async function HomePage() {
               Request your Florida remote online notary appointment, prepare with confidence, and join the provider-hosted session with a commissioned notary.
             </p>
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <ButtonLink href="/book">Request an Appointment</ButtonLink>
-              <ButtonLink href="/how-it-works" variant="secondary">See How It Works</ButtonLink>
+              <TrackedScheduleAppointmentButtonLink href="/book" location="homepage_hero">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+              <ButtonLink href="/how-it-works" variant="secondary">How It Works</ButtonLink>
             </div>
           </div>
           <HeroSessionIllustration />
@@ -197,7 +198,7 @@ export default async function HomePage() {
               <h2 className="text-2xl font-semibold">Ready to get started?</h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-white/74">Request a Florida remote online notary appointment and receive clear next steps for preparation.</p>
             </div>
-            <ButtonLink href="/book">Request an Appointment</ButtonLink>
+            <TrackedScheduleAppointmentButtonLink href="/book" location="homepage_footer">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
           </div>
         </div>
       </section>

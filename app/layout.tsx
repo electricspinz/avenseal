@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GoogleAnalytics } from "@/components/google-analytics";
 import "./globals.css";
 
 const organizationSchema = {
@@ -43,9 +44,19 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className="font-sans antialiased">
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
-        {children}
-      </body>
+  <script
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+      __html: JSON.stringify(organizationSchema),
+    }}
+  />
+
+  <GoogleAnalytics
+    measurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID}
+  />
+
+  {children}
+</body>
     </html>
   );
 }
