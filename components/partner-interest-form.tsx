@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import React, { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/button";
 import { trackPartnerInterestStarted, trackPartnerInterestSubmitted, trackPartnerPageView } from "@/lib/analytics";
 
