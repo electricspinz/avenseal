@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import { repository } from "@/lib/server/repository";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function PricingPage() {
           )}
         </div>
         <p className="mt-6 max-w-2xl text-sm leading-6 text-slateDeep">{settings.business.pricingNote}</p>
-        <ButtonLink href="/book" className="mt-10">Schedule Appointment</ButtonLink>
+        <TrackedScheduleAppointmentButtonLink href="/book" location="pricing" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
   );

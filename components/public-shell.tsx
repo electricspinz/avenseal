@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Brand } from "@/components/brand";
-import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink, TrackedScheduleAppointmentLink } from "@/components/tracked-schedule-appointment-link";
 
 export function PublicHeader() {
   return (
@@ -11,9 +11,9 @@ export function PublicHeader() {
           <Link className="focus-ring rounded-md" href="/how-it-works">How It Works</Link>
           <Link className="focus-ring rounded-md" href="/pricing">Pricing</Link>
           <Link className="focus-ring rounded-md" href="/faq">FAQ</Link>
-          <ButtonLink href="/book" className="px-5">Schedule Appointment</ButtonLink>
+          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="px-5">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
         </nav>
-        <ButtonLink href="/book" className="md:hidden">Schedule</ButtonLink>
+        <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="md:hidden">Schedule</TrackedScheduleAppointmentButtonLink>
       </div>
     </header>
   );
@@ -34,7 +34,7 @@ export function PublicFooter() {
         <FooterGroup title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"]]} />
       </div>
       <div className="mx-auto max-w-7xl border-t border-white/12 px-5 py-5 text-xs text-white/58 lg:px-8">
-        © 2026 Avenseal. Privacy and terms content is pending legal review.
+        © 2026 Avenseal. All rights reserved.
       </div>
     </footer>
   );
@@ -47,7 +47,7 @@ function FooterGroup({ title, links }: { title: string; links: [string, string][
       <ul className="mt-4 space-y-3 text-sm text-white/72">
         {links.map(([label, href]) => (
           <li key={href}>
-            <Link className="focus-ring rounded-md hover:text-white" href={href}>{label}</Link>
+            {href === "/book" ? <TrackedScheduleAppointmentLink className="focus-ring rounded-md hover:text-white" href={href} location="homepage_footer">{label}</TrackedScheduleAppointmentLink> : <Link className="focus-ring rounded-md hover:text-white" href={href}>{label}</Link>}
           </li>
         ))}
       </ul>
