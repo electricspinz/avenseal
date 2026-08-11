@@ -13,10 +13,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
-    url: "/"
+    url: "/",
+    images: ["/brand/avenseal-og-social.png"]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session."
   }

@@ -11,10 +11,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Avenseal Pricing",
     description: "Review current pricing information for remote online notary appointment services.",
-    url: "/pricing"
+    url: "/pricing",
+    images: ["/brand/avenseal-og-social.png"]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Avenseal Pricing",
     description: "Review current pricing information for remote online notary appointment services."
   }
