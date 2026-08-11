@@ -2,11 +2,11 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const analytics = {
+const analytics = vi.hoisted(() => ({
   trackPartnerInterestStarted: vi.fn(),
   trackPartnerInterestSubmitted: vi.fn(),
   trackPartnerPageView: vi.fn()
-};
+}));
 
 vi.mock("@/lib/analytics", () => analytics);
 vi.mock("@/components/public-shell", () => ({ PublicShell: ({ children }: { children: React.ReactNode }) => children }));
