@@ -44,6 +44,10 @@ const nullableNumber = (min: number, max: number) =>
 
 const text = (max = 200) => z.string().transform((value) => sanitizeText(value, max));
 
+const optionalWebsite = z
+  .union([z.string().trim().url().max(240), z.literal(""), z.null(), z.undefined()])
+  .transform((value) => value || null);
+
 export const bookingSchema = z
   .object({
     serviceId: z.string().uuid("Select a valid service."),
@@ -75,6 +79,22 @@ export const bookingSchema = z
   });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
+
+export const partnerInterestSchema = z.object({
+  firstName: text(80).pipe(z.string().min(1, "Enter your first name.")),
+  lastName: text(80).pipe(z.string().min(1, "Enter your last name.")),
+  organization: text(160).pipe(z.string().min(2, "Enter your organization.")),
+  workEmail: z.string().trim().email("Enter a valid work email.").max(180),
+  phone: optionalText(30),
+  industry: text(120).pipe(z.string().min(2, "Select your organization type.")),
+  website: optionalWebsite,
+  message: optionalText(1000),
+  noCommissionAcknowledged: z.literal(true, {
+    errorMap: () => ({ message: "Confirm that this is not a referral commission program." })
+  })
+});
+
+export type PartnerInterestInput = z.infer<typeof partnerInterestSchema>;
 
 export const adminUpdateSchema = z.object({
   status: z.enum(appointmentStatuses).optional(),

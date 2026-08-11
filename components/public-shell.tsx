@@ -29,7 +29,7 @@ export function PublicFooter() {
             Avenseal provides remote online notary appointment support for Florida customers.
           </p>
         </div>
-        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["FAQ", "/faq"], ["Schedule Appointment", "/book"]]} />
+        <FooterGroup title="Company" links={[["How It Works", "/how-it-works"], ["Pricing", "/pricing"], ["FAQ", "/faq"], ["Professional Partners", "/partners"], ["Schedule Appointment", "/book"]]} />
         <FooterGroup title="Support" links={[["Check Appointment Status", "/appointments/status"], ["Contact Us", "/contact"]]} />
         <FooterGroup title="Legal" links={[["Privacy Policy", "/privacy"], ["Terms", "/terms"]]} />
       </div>

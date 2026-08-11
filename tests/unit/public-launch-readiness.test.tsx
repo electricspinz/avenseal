@@ -11,6 +11,7 @@ import { metadata as howItWorksMetadata } from "@/app/how-it-works/page";
 import { metadata as pricingMetadata } from "@/app/pricing/page";
 import { metadata as faqMetadata } from "@/app/faq/page";
 import { metadata as aboutMetadata } from "@/app/about/page";
+import { metadata as partnersMetadata } from "@/app/partners/page";
 import { metadata as contactMetadata } from "@/app/contact/page";
 import { metadata as privacyMetadata } from "@/app/privacy/page";
 import { metadata as termsMetadata } from "@/app/terms/page";
@@ -49,7 +50,8 @@ describe("public launch readiness", () => {
       "https://www.avenseal.com/how-it-works",
       "https://www.avenseal.com/pricing",
       "https://www.avenseal.com/faq",
-      "https://www.avenseal.com/about"
+      "https://www.avenseal.com/about",
+      "https://www.avenseal.com/partners"
     ]);
     expect(robots()).toMatchObject({ host: "https://www.avenseal.com", sitemap: "https://www.avenseal.com/sitemap.xml", rules: { allow: "/" } });
   });
@@ -75,5 +77,6 @@ describe("public launch readiness", () => {
       expect(metadata.openGraph?.url).toBeTruthy();
       expect(metadata.twitter).toMatchObject({ card: "summary" });
     }
+    expect(partnersMetadata.twitter).toMatchObject({ card: "summary_large_image" });
   });
 });
