@@ -9,10 +9,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "About Avenseal",
     description: "Avenseal coordinates remote online notary appointment requests, preparation, and secure customer access.",
-    url: "/about"
+    url: "/about",
+    images: ["/brand/avenseal-og-social.png"]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "About Avenseal",
     description: "Learn how Avenseal coordinates remote online notary appointment requests, payment, and preparation."
   }
