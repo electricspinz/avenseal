@@ -65,17 +65,23 @@ describe("public launch readiness", () => {
   it("does not mark finalized legal policies as noindex", () => {
     for (const metadata of [privacyMetadata, termsMetadata]) {
       expect(metadata.robots).not.toEqual({ index: false, follow: false });
+      expect(metadata.openGraph?.url).toBeTruthy();
+      expect(metadata.openGraph?.images).toBeTruthy();
+      expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
     }
   });
 
-  it("sets canonical www-host metadata and Twitter summaries for marketing routes", () => {
+  it("sets canonical www-host metadata and large social previews for public pages", () => {
     expect(layoutMetadata.metadataBase?.toString()).toBe("https://www.avenseal.com/");
+    expect(layoutMetadata.openGraph?.images).toBeTruthy();
+    expect(layoutMetadata.twitter).toMatchObject({ card: "summary_large_image" });
     for (const metadata of [homeMetadata, howItWorksMetadata, pricingMetadata, faqMetadata, aboutMetadata]) {
       expect(metadata.alternates?.canonical).toBeTruthy();
       expect(metadata.openGraph?.title).toBeTruthy();
       expect(metadata.openGraph?.description).toBeTruthy();
       expect(metadata.openGraph?.url).toBeTruthy();
-      expect(metadata.twitter).toMatchObject({ card: "summary" });
+      expect(metadata.openGraph?.images).toBeTruthy();
+      expect(metadata.twitter).toMatchObject({ card: "summary_large_image" });
     }
     expect(partnersMetadata.twitter).toMatchObject({ card: "summary_large_image" });
   });

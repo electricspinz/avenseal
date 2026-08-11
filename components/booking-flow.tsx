@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/button";
 import { icons } from "@/components/icons";
-import { trackBookingStarted, trackBookingSubmitted } from "@/lib/analytics";
+import { trackAppointmentSelected, trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted } from "@/lib/analytics";
 import { rememberPartnerCode } from "@/lib/partner-attribution";
 
 type Draft = {
@@ -56,6 +56,8 @@ const steps = [
   "Notes & Consent",
   "Review"
 ];
+
+const analyticsStepNames = ["customer_details", "document_details", "participants_and_location", "identification_readiness", "appointment_preferences", "notes_and_consent", "review"];
 
 const categories = [
   ["affidavit", "Affidavit"],
@@ -179,13 +181,13 @@ export function BookingFlow({
 
   function next() {
     if (!validateCurrentStep()) return;
+    trackBookingStepCompleted(analyticsStepNames[step], step + 1);
     setStep((current) => Math.min(current + 1, steps.length - 1));
   }
 
   async function submit() {
     setSubmitting(true);
     setError("");
-    trackBookingSubmitted();
     const response = await fetch("/api/appointments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -204,6 +206,7 @@ export function BookingFlow({
       return;
     }
     window.localStorage.removeItem("avenseal-booking-draft");
+    trackBookingSubmitted();
     window.location.assign("/booking/confirmation");
   }
 
@@ -263,7 +266,7 @@ export function BookingFlow({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Requested appointment date"><input type="date" value={draft.preferredDate} onChange={(event) => update("preferredDate", event.target.value)} className="input" /></Field>
               <Field label="Requested appointment time">
-                <select value={draft.preferredTime} onChange={(event) => update("preferredTime", event.target.value)} className="input" disabled={availabilityLoading || slots.length === 0}>
+                <select value={draft.preferredTime} onChange={(event) => { update("preferredTime", event.target.value); trackAppointmentSelected(draft.urgency); }} className="input" disabled={availabilityLoading || slots.length === 0}>
                   {slots.map((slot) => <option key={slot} value={slot}>{formatSlot(slot)}</option>)}
                 </select>
               </Field>

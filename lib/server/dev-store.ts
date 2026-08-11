@@ -68,7 +68,7 @@ let services: OrganizationService[] = [
     id: serviceId,
     internalName: "remote_online_notarization",
     customerName: "Remote online notarization appointment",
-    description: "Pricing is configurable and should be finalized before public launch.",
+    description: "Current service pricing is provided before payment is requested.",
     basePriceCents: null,
     currency: "USD",
     defaultDurationMinutes: 30,

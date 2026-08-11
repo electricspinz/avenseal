@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import { repository } from "@/lib/server/repository";
 import type { Metadata } from "next";
 
@@ -11,10 +11,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Avenseal Pricing",
     description: "Review current pricing information for remote online notary appointment services.",
-    url: "/pricing"
+    url: "/pricing",
+    images: ["/brand/avenseal-og-social.png"]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Avenseal Pricing",
     description: "Review current pricing information for remote online notary appointment services."
   }
@@ -45,7 +46,8 @@ export default async function PricingPage() {
             </div>
           )}
         </div>
-        <ButtonLink href="/book" className="mt-10">Request an Appointment</ButtonLink>
+        <p className="mt-6 max-w-2xl text-sm leading-6 text-slateDeep">{settings.business.pricingNote}</p>
+        <TrackedScheduleAppointmentButtonLink href="/book" location="pricing" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
   );

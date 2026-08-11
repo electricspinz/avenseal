@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/button";
+import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -9,10 +9,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "How Remote Online Notary Appointments Work",
     description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary.",
-    url: "/how-it-works"
+    url: "/how-it-works",
+    images: ["/brand/avenseal-og-social.png"]
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "How Remote Online Notary Appointments Work",
     description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary."
   }
@@ -36,7 +37,7 @@ export default function HowItWorksPage() {
             </div>
           ))}
         </div>
-        <ButtonLink href="/book" className="mt-10">Request an Appointment</ButtonLink>
+        <TrackedScheduleAppointmentButtonLink href="/book" location="how_it_works" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
   );
