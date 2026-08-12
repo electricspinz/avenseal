@@ -5,6 +5,7 @@ import { Brand } from "@/components/brand";
 import { Button } from "@/components/button";
 import { icons } from "@/components/icons";
 import { trackAppointmentSelected, trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted } from "@/lib/analytics";
+import { rememberPartnerCode } from "@/lib/partner-attribution";
 
 type Draft = {
   fullName: string;
@@ -88,9 +89,7 @@ export function BookingFlow({
   useEffect(() => {
     const saved = window.localStorage.getItem("avenseal-booking-draft");
     if (saved) setDraft({ ...defaultDraft, ...JSON.parse(saved) });
-  }, []);
-
-  useEffect(() => {
+    rememberPartnerCode(new URLSearchParams(window.location.search).get("partner"));
     trackBookingStarted();
   }, []);
 
