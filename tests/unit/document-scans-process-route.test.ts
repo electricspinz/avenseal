@@ -12,7 +12,7 @@ import { POST } from "@/app/api/internal/document-scans/process/route";
 describe("document scan processor route", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mocks.env.mockReturnValue({ DOCUMENT_SCAN_WORKER_SECRET: "scan-worker-secret", DOCUMENT_SCAN_WORKER_BATCH_SIZE: 10 });
+    mocks.env.mockReturnValue({ DOCUMENT_SCAN_WORKER_SECRET: "scan-worker-secret", DOCUMENT_SCAN_WORKER_BATCH_SIZE: 10, NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service-role-key" });
     mocks.configured.mockReturnValue(true);
     mocks.admin.mockReturnValue({});
     mocks.process.mockResolvedValue({ claimed: 1, completed: 1, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 });
@@ -28,11 +28,52 @@ describe("document scan processor route", () => {
     expect(mocks.process).not.toHaveBeenCalled();
   });
 
+  it("temporarily classifies a missing server worker secret without changing the generic 401 response", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.env.mockReturnValue({ DOCUMENT_SCAN_WORKER_BATCH_SIZE: 10, NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service-role-key" });
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST" }));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized." });
+    expect(warning).toHaveBeenCalledWith("[document-scan-worker]", { category: "worker_secret_missing" });
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+
+  it("temporarily classifies a missing or mismatched bearer token without changing the generic 401 response", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST", headers: { authorization: "Bearer wrong" } }));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized." });
+    expect(warning).toHaveBeenCalledWith("[document-scan-worker]", { category: "worker_secret_mismatch" });
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+
+  it("temporarily classifies missing Supabase service configuration without changing successful worker authorization", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.env.mockReturnValue({ DOCUMENT_SCAN_WORKER_SECRET: "scan-worker-secret", DOCUMENT_SCAN_WORKER_BATCH_SIZE: 10, SUPABASE_SERVICE_ROLE_KEY: "service-role-key" });
+    mocks.configured.mockReturnValue(false);
+
+    const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process", { method: "POST", headers: { authorization: "Bearer scan-worker-secret" } }));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized." });
+    expect(warning).toHaveBeenCalledWith("[document-scan-worker]", { category: "supabase_service_config_missing" });
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+
   it("uses no cookie authority, bounds a valid batch, and returns aggregate counts only", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const response = await POST(new NextRequest("http://localhost/api/internal/document-scans/process?batchSize=999", { method: "POST", headers: { authorization: "Bearer scan-worker-secret", cookie: "admin_session=irrelevant" } }));
     expect(response.status).toBe(200);
     expect(mocks.process).toHaveBeenCalledWith({}, { batchSize: 20 });
     await expect(response.json()).resolves.toEqual({ result: { claimed: 1, completed: 1, blocked: 0, retryScheduled: 0, failed: 0, cancelled: 0 } });
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it("fails closed while scanning is disabled without claiming queued work", async () => {
