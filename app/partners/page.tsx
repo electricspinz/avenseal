@@ -1,3 +1,4 @@
+import React from "react";
 import type { Metadata } from "next";
 import { ButtonLink } from "@/components/button";
 import { icons } from "@/components/icons";
