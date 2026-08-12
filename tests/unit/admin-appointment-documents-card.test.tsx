@@ -8,18 +8,50 @@ const documentRecord = { id: "document-1", organizationId: "org-1", appointmentI
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AdminAppointmentDocumentsCard", () => {
-  it("renders uploaded metadata and a secure download action without storage details", () => {
+  it("renders uploaded metadata and keeps document contents unloaded until an admin requests a preview", () => {
     render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[documentRecord]} />);
     expect(screen.getByText("document.pdf")).toBeTruthy();
     expect(screen.getByText(/application\/pdf.*1 KB.*uploaded/i)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Download" })).toHaveProperty("href", expect.stringContaining("/api/admin/appointments/appointment-1/documents/document-1/download"));
+    expect(screen.getByRole("button", { name: "Preview document" })).toBeTruthy();
+    expect(screen.queryByTitle("Preview of document.pdf")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
     expect(document.body.textContent).not.toContain("quarantine/");
   });
 
-  it("does not offer a download action until a document is clean and active", () => {
+  it("does not offer a preview action until a document is clean and active", () => {
     render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[{ ...documentRecord, scanStatus: "pending", storageStatus: "quarantined" }]} />);
-    expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
-    expect(screen.getByText("Download unavailable")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Preview document" })).toBeNull();
+    expect(screen.getByText("Preview unavailable.")).toBeTruthy();
+  });
+
+  it("renders a click-triggered accessible PDF preview and retains review controls", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ previewUrl: "https://storage.example/temporary-preview", contentType: "application/pdf" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[documentRecord]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview document" }));
+    const preview = await screen.findByRole("dialog", { name: "Preview: document.pdf" });
+    expect(fetch).toHaveBeenCalledWith("/api/admin/appointments/appointment-1/documents/document-1/preview");
+    expect(preview.querySelector("iframe")?.getAttribute("src")).toContain("temporary-preview#toolbar=0&navpanes=0");
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close Preview" }));
+    expect(screen.queryByRole("dialog", { name: "Preview: document.pdf" })).toBeNull();
+    expect(document.body.textContent).not.toContain("quarantine/");
+  });
+
+  it("labels active unsupported documents without requesting their contents", () => {
+    render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[{ ...documentRecord, contentType: "application/octet-stream" as never }]} />);
+    expect(screen.getByText("Preview unavailable for this file type.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Preview document" })).toBeNull();
+  });
+
+  it("restores the preview action after a safe loading failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("storage credentials")));
+    render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[documentRecord]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview document" }));
+    expect((await screen.findByRole("status")).textContent).toContain("The document could not be loaded.");
+    expect(screen.getByRole("button", { name: "Preview document" })).toHaveProperty("disabled", false);
+    expect(document.body.textContent).not.toContain("storage credentials");
   });
 
   it("confirms approval, invokes the review endpoint once, and renders review metadata", async () => {
