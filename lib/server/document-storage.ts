@@ -10,6 +10,7 @@ export const appointmentDocumentStorage = {
 
 export type AppointmentDocumentContentType = (typeof appointmentDocumentStorage.allowedContentTypes)[number];
 export type AppointmentDocumentUploadMetadata = Readonly<{ originalFilename: string; contentType: AppointmentDocumentContentType; sizeBytes: number }>;
+export const adminDocumentPreviewExpiresInSeconds = 60;
 
 const extensionForContentType: Record<AppointmentDocumentContentType, readonly string[]> = {
   "application/pdf": [".pdf"],
@@ -64,6 +65,11 @@ export type AppointmentDocumentObjectStorage = Readonly<{
   remove: (key: string) => Promise<void>;
 }>;
 
+/** A short-lived, server-issued capability used only for an authorized admin preview. */
+export type AppointmentDocumentPreviewStorage = Readonly<{
+  createSignedUrl: (key: string, expiresInSeconds: number) => Promise<string>;
+}>;
+
 /** Server-only adapter for the private bucket. No browser caller receives this boundary or an object key. */
 export function createSupabaseAppointmentDocumentStorage(supabase: SupabaseClient): AppointmentDocumentObjectStorage {
   return {
@@ -79,6 +85,17 @@ export function createSupabaseAppointmentDocumentStorage(supabase: SupabaseClien
     async remove(key) {
       const { error } = await supabase.storage.from(appointmentDocumentStorage.bucket).remove([key]);
       if (error) throw new Error("Document storage cleanup failed.");
+    }
+  };
+}
+
+/** Server-only signed URL boundary. Object keys and storage credentials never cross this boundary. */
+export function createSupabaseAppointmentDocumentPreviewStorage(supabase: SupabaseClient): AppointmentDocumentPreviewStorage {
+  return {
+    async createSignedUrl(key, expiresInSeconds) {
+      const { data, error } = await supabase.storage.from(appointmentDocumentStorage.bucket).createSignedUrl(key, expiresInSeconds);
+      if (error || !data?.signedUrl) throw new Error("Document preview URL could not be created.");
+      return data.signedUrl;
     }
   };
 }

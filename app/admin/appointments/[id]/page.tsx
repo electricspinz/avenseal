@@ -10,7 +10,7 @@ import { parseTimelineFilters, queryAppointmentTimeline } from "@/lib/server/tim
 import { CustomerTimeline, TimelineFiltersForm } from "@/components/customer-timeline";
 import { ExternalSessionCard } from "@/components/external-session-card";
 import { ClientWorkspaceAccessCard } from "@/components/client-workspace-access-card";
-import { AdminAppointmentDocumentsCard } from "@/components/admin-appointment-documents-card";
+import { AdminAppointmentDocumentsCard, type AdminAppointmentDocumentPresentation } from "@/components/admin-appointment-documents-card";
 import { createAppointmentDocumentRepository } from "@/lib/server/document-repository";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 import { calculateAppointmentReadiness } from "@/lib/server/appointment-readiness";
@@ -163,7 +163,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
             </div>
           </AdminCard>
           <ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />
-          <AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents} />
+          <AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} />
           <ClientWorkspaceAccessCard appointmentId={appointment.id} initial={clientAccess} />
         </div>
         <AdminCard>
