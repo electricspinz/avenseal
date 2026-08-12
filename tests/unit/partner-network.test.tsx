@@ -30,7 +30,7 @@ describe("Professional Partner Network", () => {
     render(<PartnersPage />);
 
     expect(screen.getByRole("heading", { name: "Give Your Clients an Easier Way to Access Online Notary Services" })).toBeTruthy();
-    expect(screen.getByText(/Identity verification, electronic signing, and the live audio-video session take place through BlueNotary/i)).toBeTruthy();
+    expect(screen.getAllByText(/Identity verification, electronic signing, and the live audio-video session take place through BlueNotary/i)).toHaveLength(2);
     expect(screen.getByRole("link", { name: "Become an Avenseal Partner" }).getAttribute("href")).toBe("#partner-interest");
   });
 
