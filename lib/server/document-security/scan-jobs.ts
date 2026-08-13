@@ -45,6 +45,13 @@ function mapJob(row: JobRow): DocumentScanJob {
   return { id: row.id, organizationId: row.organization_id, appointmentId: row.appointment_request_id, documentId: row.document_id, status: row.status, attemptCount: row.attempt_count, nextAttemptAt: row.next_attempt_at, claimedAt: row.claimed_at, claimExpiresAt: row.claim_expires_at, claimedBy: row.claimed_by, lastFailureCategory: row.last_failure_category, provider: row.provider, providerRequestId: row.provider_request_id, scanDurationMs: row.scan_duration_ms, completedAt: row.completed_at };
 }
 
+function mapClaimedJob(row: JobRow): DocumentScanJob {
+  if (typeof row.claimed_by !== "string" || row.claimed_by.trim().length === 0) {
+    throw new Error("Document scan claim is missing lease ownership.");
+  }
+  return mapJob({ ...row, status: "claimed" });
+}
+
 function safeCategory(result: DocumentScanResult): DocumentScanFailureCategory {
   return result.safeFailureCategory ?? (result.outcome === "permanent_failure" ? "invalid_response" : "unexpected_error");
 }
@@ -70,7 +77,7 @@ export function createDocumentScanJobStore(supabase: SupabaseClient) {
     async claim(input: { batchSize?: number; claimedBy?: string; leaseSeconds?: number } = {}) {
       const { data, error } = await supabase.rpc("claim_document_scan_jobs", { p_batch_size: Math.min(Math.max(input.batchSize ?? 10, 1), 20), p_claimed_by: input.claimedBy ?? `document-scan-worker:${randomUUID()}`, p_lease_seconds: input.leaseSeconds ?? 300 });
       if (error) throw error;
-      return ((data ?? []) as JobRow[]).map(mapJob);
+      return ((data ?? []) as JobRow[]).map(mapClaimedJob);
     },
     async complete(job: DocumentScanJob, result: DocumentScanResult) {
       const { data, error } = await supabase.from("document_scan_jobs").update({ status: "completed", provider: result.provider, provider_request_id: result.providerRequestId ?? null, scan_duration_ms: result.durationMs ?? null, completed_at: new Date().toISOString(), claimed_at: null, claim_expires_at: null, claimed_by: null }).eq("id", job.id).eq("organization_id", job.organizationId).eq("document_id", job.documentId).eq("status", "claimed").eq("claimed_by", job.claimedBy ?? "").select().maybeSingle();
