@@ -147,6 +147,16 @@ export function documentPreviewedAudit(document: Pick<AppointmentDocumentFile, "
   };
 }
 
+export function documentProviderHandoffDownloadedAudit(document: Pick<AppointmentDocumentFile, "id" | "organizationId" | "appointmentId">, actorType: "owner" | "admin", occurredAt = new Date().toISOString()) {
+  return {
+    organization_id: document.organizationId,
+    action: "document.provider_handoff_downloaded",
+    entity_type: "appointment_request",
+    entity_id: document.appointmentId,
+    metadata: { documentId: document.id, actorType, occurredAt }
+  };
+}
+
 export function documentReviewedAudit(document: Pick<AppointmentDocumentFile, "id" | "organizationId" | "appointmentId">, reviewer: DocumentReviewer, action: "document.approved" | "document.rejected", occurredAt = new Date().toISOString()) {
   return {
     organization_id: document.organizationId,
@@ -466,12 +476,30 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
       if (error) throw error;
       return data ? mapDownloadDocument(data as Omit<DocumentRow, "reviewed_by" | "reviewer" | "reviewed_at" | "review_notes" | "metadata">) : null;
     },
+    async getDocumentForProviderHandoff(organizationId: string, appointmentId: string, documentId: string) {
+      const { data, error } = await supabase
+        .from("appointment_document_files")
+        .select(downloadDocumentSelect)
+        .eq("organization_id", organizationId)
+        .eq("appointment_request_id", appointmentId)
+        .eq("id", documentId)
+        .eq("scan_status", "clean")
+        .eq("storage_status", "active")
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapDownloadDocument(data as Omit<DocumentRow, "reviewed_by" | "reviewer" | "reviewed_at" | "review_notes" | "metadata">) : null;
+    },
     async recordDocumentDownload(document: AppointmentDocumentFile, actorType: "owner" | "admin") {
       const { error } = await supabase.from("audit_logs").insert(documentDownloadedAudit(document, actorType));
       if (error) throw error;
     },
     async recordDocumentPreview(document: AppointmentDocumentFile, actorType: "owner" | "admin") {
       const { error } = await supabase.from("audit_logs").insert(documentPreviewedAudit(document, actorType));
+      if (error) throw error;
+    },
+    async recordDocumentProviderHandoffDownload(document: AppointmentDocumentFile, actorType: "owner" | "admin") {
+      const { error } = await supabase.from("audit_logs").insert(documentProviderHandoffDownloadedAudit(document, actorType));
       if (error) throw error;
     },
     async getDocumentReview(organizationId: string, appointmentId: string, documentId: string) {

@@ -13,15 +13,17 @@ describe("AdminAppointmentDocumentsCard", () => {
     expect(screen.getByText("document.pdf")).toBeTruthy();
     expect(screen.getByText(/application\/pdf.*1 KB.*uploaded/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Preview document" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download for provider handoff" })).toBeTruthy();
     expect(screen.queryByTitle("Preview of document.pdf")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Download" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /download/i })).toBeNull();
     expect(document.body.textContent).not.toContain("quarantine/");
   });
 
   it("does not offer a preview action until a document is clean and active", () => {
     render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[{ ...documentRecord, scanStatus: "pending", storageStatus: "quarantined" }]} />);
     expect(screen.queryByRole("button", { name: "Preview document" })).toBeNull();
-    expect(screen.getByText("Preview unavailable.")).toBeTruthy();
+    expect(screen.getByText("Security processing in progress. Preview and provider handoff will be available when complete.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download for provider handoff" })).toBeNull();
   });
 
   it("renders a click-triggered accessible PDF preview and retains review controls", async () => {
@@ -43,6 +45,19 @@ describe("AdminAppointmentDocumentsCard", () => {
     render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[{ ...documentRecord, contentType: "application/octet-stream" as never }]} />);
     expect(screen.getByText("Preview unavailable for this file type.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Preview document" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download for provider handoff" })).toBeTruthy();
+  });
+
+  it("requires explicit confirmation before using the dedicated provider-handoff route", () => {
+    render(<AdminAppointmentDocumentsCard appointmentId="appointment-1" documents={[documentRecord]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download for provider handoff" }));
+    const dialog = screen.getByRole("dialog", { name: "Download document for provider handoff?" });
+    expect(dialog.textContent).toContain("This downloads the customer document for upload to the notarization provider. Continue?");
+    const form = dialog.querySelector("form");
+    expect(form?.getAttribute("method")).toBe("get");
+    expect(form?.getAttribute("action")).toBe("/api/admin/appointments/appointment-1/documents/document-1/provider-handoff");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Download document for provider handoff?" })).toBeNull();
   });
 
   it("restores the preview action after a safe loading failure", async () => {
