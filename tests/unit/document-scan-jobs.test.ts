@@ -35,11 +35,39 @@ describe("document scan job store", () => {
     } as never;
     const store = createDocumentScanJobStore(supabase);
     await expect(store.enqueue({ organizationId: "org-1", appointmentId: "appointment-1", documentId: "document-1" })).resolves.toBe("job-1");
-    await expect(store.claim({ batchSize: 100, claimedBy: "worker", leaseSeconds: 300 })).resolves.toMatchObject([{ id: "job-1", organizationId: "org-1", attemptCount: 1 }]);
+    await expect(store.claim({ batchSize: 100, claimedBy: "worker", leaseSeconds: 300 })).resolves.toMatchObject([{ id: "job-1", organizationId: "org-1", attemptCount: 1, claimedBy: "worker" }]);
     expect(calls).toEqual(expect.arrayContaining([
       { name: "enqueue_document_scan_job", args: { p_organization_id: "org-1", p_appointment_request_id: "appointment-1", p_document_id: "document-1" } },
       { name: "claim_document_scan_jobs", args: { p_batch_size: 20, p_claimed_by: "worker", p_lease_seconds: 300 } }
     ]));
+  });
+
+  it("fails closed when a claim response omits the lease owner", async () => {
+    const supabase = {
+      rpc: async () => ({ data: [{ id: "job-1", organization_id: "org-1", appointment_request_id: "appointment-1", document_id: "document-1", attempt_count: 1 }], error: null })
+    } as never;
+
+    await expect(createDocumentScanJobStore(supabase).claim({ claimedBy: "worker" })).rejects.toThrow("Document scan claim is missing lease ownership.");
+  });
+
+  it("carries the returned lease owner into every conditional finalization and does not count zero-row updates as success", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const updateChain = { eq: (field: string, value: unknown) => { filters.push([field, value]); return updateChain; }, select: () => updateChain, maybeSingle: async () => ({ data: null, error: null }) };
+    const row = { id: "job-1", organization_id: "org-1", appointment_request_id: "appointment-1", document_id: "document-1", attempt_count: 1, claimed_by: "worker-1" };
+    const supabase = {
+      rpc: async () => ({ data: [row], error: null }),
+      from: (table: string) => table === "document_scan_jobs" ? { update: () => updateChain } : { insert: async () => ({ error: null }) }
+    } as never;
+    const store = createDocumentScanJobStore(supabase);
+    const [job] = await store.claim({ claimedBy: "worker-1" });
+
+    await expect(store.complete(job, { outcome: "clean", provider: "fake" })).resolves.toBeNull();
+    await expect(store.block(job, { outcome: "infected", provider: "fake" })).resolves.toBe(false);
+    await expect(store.scheduleRetry(job, { outcome: "retryable_failure", provider: "fake", safeFailureCategory: "provider_unavailable" }, new Date("2026-08-01T00:00:00.000Z"))).resolves.toBe(false);
+    await expect(store.fail(job, { outcome: "permanent_failure", provider: "fake", safeFailureCategory: "provider_rejected" })).resolves.toBe(false);
+    await expect(store.cancel(job)).resolves.toBe(false);
+
+    expect(filters.filter(([field, value]) => field === "claimed_by" && value === "worker-1")).toHaveLength(5);
   });
 
   it("derives tenant-scoped safe operational metrics without exposing job details", async () => {
