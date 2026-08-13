@@ -64,9 +64,13 @@ function scannerWith(fetchImplementation: DocumentScannerFetch) {
 }
 
 describe("verified Cloudmersive basic adapter", () => {
-  it("posts one private multipart request and maps a clean response", async () => {
+  it.each([
+    ["empty findings", { CleanResult: true, FoundViruses: [] }],
+    ["null findings", { CleanResult: true, FoundViruses: null }],
+    ["omitted findings", { CleanResult: true }]
+  ])("posts one private multipart request and maps a clean response with %s", async (_name, payload) => {
     const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
-    const fetchImplementation: DocumentScannerFetch = async (input, init) => { calls.push([input, init]); return jsonResponse({ CleanResult: true, FoundViruses: [] }); };
+    const fetchImplementation: DocumentScannerFetch = async (input, init) => { calls.push([input, init]); return jsonResponse(payload); };
     const result = await scannerWith(fetchImplementation).scan(request);
 
     expect(result).toEqual({ outcome: "clean", provider: "cloudmersive" });
@@ -86,8 +90,8 @@ describe("verified Cloudmersive basic adapter", () => {
     expect(JSON.stringify({ endpoint: String(endpoint), headers: Object.fromEntries(new Headers(init?.headers)), fields: [...form.keys()] })).not.toContain("private.pdf");
   });
 
-  it("maps only CleanResult false to infected without returning detections", async () => {
-    const result = await scannerWith(async () => jsonResponse({ CleanResult: false, FoundViruses: [{ VirusName: "sensitive-detection" }] })).scan(request);
+  it("maps only a documented CleanResult false response to infected without returning detections", async () => {
+    const result = await scannerWith(async () => jsonResponse({ CleanResult: false, FoundViruses: [{ FileName: "provider-file", VirusName: "sensitive-detection" }] })).scan(request);
     expect(result).toEqual({ outcome: "infected", provider: "cloudmersive" });
     expect(JSON.stringify(result)).not.toContain("sensitive-detection");
   });
@@ -105,11 +109,14 @@ describe("verified Cloudmersive basic adapter", () => {
   });
 
   it.each([
-    ["non-JSON", new Response("not JSON", { status: 200, headers: { "content-type": "text/plain" } })],
+    ["malformed JSON", new Response("not JSON", { status: 200, headers: { "content-type": "text/plain" } })],
     ["empty", new Response(null, { status: 200 })],
     ["missing CleanResult", jsonResponse({ FoundViruses: [] })],
     ["non-boolean CleanResult", jsonResponse({ CleanResult: "true", FoundViruses: [] })],
-    ["malformed FoundViruses", jsonResponse({ CleanResult: true, FoundViruses: {} })]
+    ["malformed FoundViruses", jsonResponse({ CleanResult: true, FoundViruses: {} })],
+    ["malformed finding", jsonResponse({ CleanResult: false, FoundViruses: [{ VirusName: "missing filename" }] })],
+    ["contradictory clean result", jsonResponse({ CleanResult: true, FoundViruses: [{ FileName: "provider-file", VirusName: "sensitive-detection" }] })],
+    ["unexpected object shape", jsonResponse({ CleanResult: true, FoundViruses: [], Unexpected: true })]
   ])("fails closed for a %s success payload", async (_name, response) => {
     const result = await scannerWith(async () => response).scan(request);
     expect(result).toEqual({ outcome: "permanent_failure", provider: "cloudmersive", safeFailureCategory: "invalid_response" });
