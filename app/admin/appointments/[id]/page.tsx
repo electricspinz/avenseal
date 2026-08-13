@@ -16,6 +16,9 @@ import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/serve
 import { calculateAppointmentReadiness } from "@/lib/server/appointment-readiness";
 import { AppointmentReadinessCard } from "@/components/appointment-readiness-card";
 import { AdminAppointmentReschedule } from "@/components/admin-appointment-reschedule";
+import { deriveAppointmentNextAction } from "@/lib/server/appointment-next-action";
+import { AdminAppointmentNextActionPanel } from "@/components/admin-appointment-next-action-panel";
+import { isCustomerVisibleExternalSession } from "@/lib/server/external-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +44,16 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
     documents: documents.map((document) => ({ organizationId: document.organizationId, appointmentId: document.appointmentId, status: document.status, deletedAt: document.deletedAt })),
     externalSession: externalSession ? { organizationId: externalSession.organizationId, appointmentId: externalSession.appointmentId, status: externalSession.status } : null
   }), repository.listAppointmentRescheduleHistory(appointment.organizationId, appointment.id)]);
+  const nextAction = deriveAppointmentNextAction({
+    appointmentStatus: appointment.status,
+    paymentStatus: payments[0]?.status ?? null,
+    documents: documents.map((document) => ({ status: document.status, scanStatus: document.scanStatus, storageStatus: document.storageStatus, deletedAt: document.deletedAt })),
+    externalSession: externalSession ? {
+      status: externalSession.status,
+      customerVisible: isCustomerVisibleExternalSession({ paymentStatus: payments[0]?.status ?? null, appointmentStatus: appointment.status, organizationId: appointment.organizationId, appointmentId: appointment.id, session: externalSession })
+    } : null,
+    communications: communications.map((message) => ({ messageType: message.messageType, status: message.status }))
+  });
 
   return (
     <AdminShell active="Appointments">
@@ -54,6 +67,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
           <AppointmentReadinessCard readiness={readiness} />
+          <AdminAppointmentNextActionPanel action={nextAction} />
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Customer</h2>
             <dl className="mt-4 grid gap-3 text-sm">
@@ -116,7 +130,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               {notes.length === 0 && <p>No internal notes yet.</p>}
             </div>
           </AdminCard>
-          <AdminCard>
+          <div id="payment"><AdminCard>
             <h2 className="text-xl font-semibold text-navy">Payment</h2>
             <div className="mt-4 space-y-4 text-sm">
               {payments.map((payment) => (
@@ -132,7 +146,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               {payments.length === 0 && <p className="text-slateDeep">No payment record yet.</p>}
               <PaymentLinkButton appointmentId={appointment.id} />
             </div>
-          </AdminCard>
+          </AdminCard></div>
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Calendar</h2>
             <div className="mt-4 space-y-3 text-sm text-slateDeep">
@@ -150,7 +164,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               {calendarEvents.length === 0 && <p>No calendar event has been created.</p>}
             </div>
           </AdminCard>
-          <AdminCard>
+          <div id="communications"><AdminCard>
             <h2 className="text-xl font-semibold text-navy">Communications</h2>
             <div className="mt-4 space-y-3 text-sm text-slateDeep">
               {communications.map((message) => (
@@ -161,17 +175,17 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               ))}
               {communications.length === 0 && <p>No messages recorded yet.</p>}
             </div>
-          </AdminCard>
-          <ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />
-          <AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} />
-          <ClientWorkspaceAccessCard appointmentId={appointment.id} initial={clientAccess} />
+          </AdminCard></div>
+          <div id="external-session"><ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} /></div>
+          <div id="documents"><AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} /></div>
+          <div id="client-workspace"><ClientWorkspaceAccessCard appointmentId={appointment.id} initial={clientAccess} /></div>
         </div>
-        <AdminCard>
+        <div id="status-management"><AdminCard>
           <h2 className="text-xl font-semibold text-navy">Status Management</h2>
           <div className="mt-5">
             <AdminAppointmentForm appointment={appointment} />
           </div>
-        </AdminCard>
+        </AdminCard></div>
       </div>
     </AdminShell>
   );
