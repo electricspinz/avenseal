@@ -161,10 +161,25 @@ async function scanBytes(bytes: DocumentScanRequest["bytes"]) {
   return new Response(bytes).arrayBuffer();
 }
 
-function isCloudmersiveResponse(value: unknown): value is { CleanResult: boolean; FoundViruses?: unknown[] } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const result = value as Record<string, unknown>;
-  return typeof result.CleanResult === "boolean" && (result.FoundViruses === undefined || Array.isArray(result.FoundViruses));
+const cloudmersiveVirusFindingSchema = z.object({
+  FileName: z.string(),
+  VirusName: z.string()
+}).strict();
+
+const cloudmersiveResponseSchema = z.object({
+  CleanResult: z.boolean(),
+  // Cloudmersive's basic endpoint returns null for FoundViruses on a clean result.
+  FoundViruses: z.union([z.array(cloudmersiveVirusFindingSchema), z.null()]).optional()
+}).strict().superRefine((value, context) => {
+  if (value.CleanResult && Array.isArray(value.FoundViruses) && value.FoundViruses.length > 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "A clean scan result cannot contain virus findings." });
+  }
+});
+
+type CloudmersiveResponse = z.infer<typeof cloudmersiveResponseSchema>;
+
+function isCloudmersiveResponse(value: unknown): value is CloudmersiveResponse {
+  return cloudmersiveResponseSchema.safeParse(value).success;
 }
 
 function cloudmersiveHttpFailure(status: number): DocumentScanResult {
