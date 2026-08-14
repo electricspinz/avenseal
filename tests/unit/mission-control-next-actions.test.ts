@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadMissionControlAppointmentActions, type MissionControlNextActionDependencies } from "@/lib/server/mission-control-next-actions";
-import type { AppointmentRequest } from "@/lib/types";
+import type { AppointmentRequest, CommunicationMessage } from "@/lib/types";
 
 function appointment(overrides: Partial<AppointmentRequest> = {}): AppointmentRequest {
   return {
@@ -11,6 +11,15 @@ function appointment(overrides: Partial<AppointmentRequest> = {}): AppointmentRe
 }
 
 const approvedDocument = { organizationId: "org-1", appointmentId: "appointment-1", status: "approved", scanStatus: "clean", storageStatus: "active", deletedAt: null };
+
+function communication(status: CommunicationMessage["status"]) {
+  return {
+    organizationId: "org-1",
+    appointmentId: "appointment-1",
+    messageType: "external_session_available" as CommunicationMessage["messageType"],
+    status,
+  };
+}
 
 function source(overrides: Partial<MissionControlNextActionDependencies> = {}): MissionControlNextActionDependencies {
   return {
@@ -71,15 +80,15 @@ describe("Mission Control appointment actions", () => {
 
   it("distinguishes informational session processing from a failed delivery", async () => {
     const sessions = async () => [{ organizationId: "org-1", appointmentId: "appointment-1", status: "scheduled", launchUrl: "https://provider.example/session" }];
-    const processing = await firstAction({ listSessionSources: sessions, listCommunicationSources: async () => [{ organizationId: "org-1", appointmentId: "appointment-1", messageType: "external_session_available", status: "queued" }] });
-    const failed = await firstAction({ listSessionSources: sessions, listCommunicationSources: async () => [{ organizationId: "org-1", appointmentId: "appointment-1", messageType: "external_session_available", status: "failed" }] });
+    const processing = await firstAction({ listSessionSources: sessions, listCommunicationSources: async () => [communication("queued")] });
+    const failed = await firstAction({ listSessionSources: sessions, listCommunicationSources: async () => [communication("failed")] });
     expect(processing?.action).toMatchObject({ kind: "session_communication_processing", ctaLabel: undefined });
     expect(failed?.action).toMatchObject({ kind: "session_communication_failed", href: "/admin/communications" });
   });
 
   it("keeps ready sessions out of Needs Attention and surfaces terminal session outcomes safely", async () => {
     const baseSession = { organizationId: "org-1", appointmentId: "appointment-1", launchUrl: "https://provider.example/session" };
-    const ready = await firstAction({ listSessionSources: async () => [{ ...baseSession, status: "ready" }], listCommunicationSources: async () => [{ organizationId: "org-1", appointmentId: "appointment-1", messageType: "external_session_available", status: "sent" }] });
+    const ready = await firstAction({ listSessionSources: async () => [{ ...baseSession, status: "ready" }], listCommunicationSources: async () => [communication("sent")] });
     const completed = await firstAction({ listSessionSources: async () => [{ ...baseSession, status: "completed" }] });
     const cancelled = await firstAction({ listSessionSources: async () => [{ ...baseSession, status: "cancelled" }] });
     expect(ready?.action.kind).toBe("ready_for_appointment_review");

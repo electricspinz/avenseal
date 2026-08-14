@@ -1,4 +1,4 @@
-import type { AppointmentRequest } from "@/lib/types";
+import type { AppointmentRequest, CommunicationMessage } from "@/lib/types";
 import {
   deriveAppointmentNextAction,
   type AppointmentNextAction,
@@ -26,7 +26,12 @@ export type MissionControlAppointmentAction = Readonly<{
 
 type PaymentSource = Readonly<{ organizationId: string; appointmentId: string; status: string }>;
 type SessionSource = Readonly<{ organizationId: string; appointmentId: string; status: string; launchUrl: string | null }>;
-type CommunicationSource = Readonly<{ organizationId: string; appointmentId: string; messageType: string; status: string }>;
+type CommunicationSource = Readonly<{
+  organizationId: string;
+  appointmentId: string;
+  messageType: CommunicationMessage["messageType"];
+  status: CommunicationMessage["status"];
+}>;
 type DocumentSource = Readonly<{
   organizationId: string;
   appointmentId: string;
