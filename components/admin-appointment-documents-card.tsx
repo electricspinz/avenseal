@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { AdminCard } from "@/components/admin-shell";
 import { Button } from "@/components/button";
 import type { AppointmentDocumentFile } from "@/lib/server/document-repository";
@@ -14,6 +15,7 @@ export type AdminAppointmentDocumentPresentation = Pick<AppointmentDocumentFile,
 const previewContentTypes = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 
 export function AdminAppointmentDocumentsCard({ appointmentId, documents: initialDocuments }: { appointmentId: string; documents: readonly AdminAppointmentDocumentPresentation[] }) {
+  const router = useRouter();
   const [documents, setDocuments] = useState(initialDocuments);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function AdminAppointmentDocumentsCard({ appointmentId, documents: initia
       setRejectingId(null);
       setReviewNotes("");
       setMessage(action === "approve" ? "Document approved." : "Document rejected.");
+      router.refresh();
     } catch {
       setMessage("Document review could not be completed. Please try again.");
     } finally {
