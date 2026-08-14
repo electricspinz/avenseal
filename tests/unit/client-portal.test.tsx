@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ClientPortalHome } from "@/components/client-portal/client-portal-home";
-import { deriveClientWorkspaceNextStep, projectPortal, queryClientPortal } from "@/lib/server/client-portal";
+import { projectPortal, queryClientPortal } from "@/lib/server/client-portal";
 import type { CustomerAppointmentStatus } from "@/lib/types";
 
 const status: CustomerAppointmentStatus = { appointmentId: "appointment-1", organizationId: "organization-1", reference: "AVEN-1234", customerName: "Avery Doe", customerEmail: "avery@example.com", status: "awaiting_payment", customerStatusLabel: "Payment required", preferredDate: "2026-08-01", preferredTime: "10:00", timezone: "America/New_York", serviceName: "Remote online notarization", paymentStatus: "payment_link_created", amountDueCents: 2500, currency: "USD", checkoutUrl: "https://provider.example/secret", paymentExpiresAt: "2026-08-01T10:00:00.000Z", businessName: "Avenseal", businessEmail: "support@example.com", businessPhone: "555-0100", meetingUrl: null };
@@ -18,17 +18,9 @@ describe("Client Portal foundation", () => {
 
   it("uses payment before preparation and distinguishes unavailable domains", () => {
     const portal = projectPortal(status);
-    expect(portal.nextStep.title).toBe("Complete payment");
     expect(portal.documents.availability).toBe("available");
     expect(portal.workflow.availability).toBe("unavailable");
     expect(portal.checklist.find((item) => item.id === "payment")?.state).toBe("current");
-  });
-
-  it("prioritizes cancelled and completed appointments over payment and session actions", () => {
-    const readySession = { availability: "available" as const, provider: "Provider", sessionName: "Session", launchUrl: "https://example.test", status: "ready" };
-    expect(deriveClientWorkspaceNextStep({ ...status, status: "cancelled" }, readySession).title).toBe("Appointment cancelled");
-    expect(deriveClientWorkspaceNextStep({ ...status, status: "completed" }, readySession).title).toBe("Appointment completed");
-    expect(deriveClientWorkspaceNextStep({ ...status, paymentStatus: null, checkoutUrl: null }, readySession).actionLabel).toBe("Join Online Notarization");
   });
 
   it("renders accessible customer-facing sections without payment or mutation controls", () => {
@@ -37,7 +29,8 @@ describe("Client Portal foundation", () => {
     expect(screen.getByRole("heading", { name: "Your Appointment Status" })).toBeTruthy();
     expect(screen.getByText("Payment needed")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Preparation checklist" })).toBeTruthy();
-    expect(screen.getByText("Document preparation is not yet confirmed in this workspace.")).toBeTruthy();
+    expect(screen.getByText("Upload the document needed for your appointment.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Your next step" })).toBeNull();
     expect(screen.getByRole("link", { name: "Contact Avenseal" }).getAttribute("href")).toBe("/contact");
     expect(screen.queryByRole("button", { name: /pay|upload|send/i })).toBeNull();
   });
@@ -61,5 +54,10 @@ describe("Client Portal foundation", () => {
     expect(JSON.stringify(portal?.readiness)).not.toContain("private-reference");
     expect(JSON.stringify(portal?.readiness)).not.toContain("private-note");
     expect(JSON.stringify(portal?.readiness)).not.toContain("provider.example");
+  });
+
+  it("uses the canonical readiness state for customer-safe document checklist guidance", () => {
+    expect(projectPortal(status).checklist.find((item) => item.id === "documents")).toMatchObject({ state: "current", detail: "Upload the document needed for your appointment." });
+    expect(projectPortal({ ...status, status: "confirmed", paymentStatus: "paid" }, null, [], { state: "documents_under_review", label: "We’re reviewing your documents", explanation: "", nextStep: "", tone: "neutral" }).checklist.find((item) => item.id === "documents")).toMatchObject({ state: "current", detail: "Your document has been received and is being securely processed and reviewed." });
   });
 });

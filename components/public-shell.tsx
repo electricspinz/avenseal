@@ -13,7 +13,10 @@ export function PublicHeader() {
           <Link className="focus-ring rounded-md" href="/faq">FAQ</Link>
           <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="px-5">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
         </nav>
-        <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="md:hidden">Schedule</TrackedScheduleAppointmentButtonLink>
+        <div className="flex items-center gap-3 md:hidden">
+          <Link className="focus-ring rounded-md text-sm font-semibold text-navy" href="/faq">Help</Link>
+          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header">Schedule</TrackedScheduleAppointmentButtonLink>
+        </div>
       </div>
     </header>
   );

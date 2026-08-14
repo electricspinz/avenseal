@@ -20,10 +20,13 @@ export const metadata: Metadata = {
 };
 
 const effectiveDate = "August 9, 2026";
+const sections = ["1. Introduction and Scope", "2. Information We Collect", "3. Documents and Uploaded Materials", "4. Payments", "5. Identity Verification and Remote Notarization Providers", "6. How We Use Information", "7. How We Share Information", "8. Cookies, Local Storage, and Analytics", "9. Data Retention and Security", "10. Privacy Rights and Florida Residents", "11. International Users and Children's Privacy", "12. Third-Party Services and Changes to This Policy", "13. Contact Us"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="mt-10"><h2 className="text-2xl font-semibold tracking-tight text-navy">{title}</h2><div className="mt-4 space-y-4 leading-7 text-slateDeep">{children}</div></section>;
+  return <section id={sectionId(title)} className="mt-10 scroll-mt-24"><h2 className="text-2xl font-semibold tracking-tight text-navy">{title}</h2><div className="mt-4 space-y-4 leading-7 text-slateDeep">{children}</div></section>;
 }
+
+function sectionId(title: string) { return `privacy-${title.replace(/[^a-z0-9]+/gi, "-").replace(/(^-|-$)/g, "").toLowerCase()}`; }
 
 export default function PrivacyPage() {
   return (
@@ -31,6 +34,12 @@ export default function PrivacyPage() {
       <article className="mx-auto max-w-3xl px-5 py-16 lg:px-8">
         <h1 className="text-4xl font-semibold tracking-tight text-navy sm:text-5xl">Privacy Policy</h1>
         <p className="mt-5 text-sm leading-6 text-slateDeep">Effective Date: {effectiveDate}<br />Last Updated: {effectiveDate}</p>
+        <nav aria-label="Privacy Policy sections" className="mt-8 rounded-lg border border-silver bg-mist p-4">
+          <p className="text-sm font-semibold text-navy">On this page</p>
+          <ol className="mt-3 grid gap-x-5 gap-y-2 text-sm sm:grid-cols-2">
+            {sections.map((title) => <li key={title}><a className="focus-ring rounded text-slateDeep underline" href={`#${sectionId(title)}`}>{title}</a></li>)}
+          </ol>
+        </nav>
 
         <Section title="1. Introduction and Scope">
           <p>Avenseal LLC, doing business as Avenseal (&ldquo;Avenseal,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), provides customer-facing appointment, payment, preparation, communication, and customer-workspace services for Remote Online Notary appointments. This Privacy Policy explains how we collect, use, disclose, and otherwise process personal information through avenseal.com, our booking and customer interfaces, appointment communications, and related services (collectively, the &ldquo;Services&rdquo;).</p>

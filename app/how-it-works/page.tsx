@@ -37,6 +37,15 @@ export default function HowItWorksPage() {
             </div>
           ))}
         </div>
+        <section className="mt-12 rounded-lg border border-silver bg-mist p-6 sm:p-8" aria-labelledby="what-youll-need">
+          <h2 id="what-youll-need" className="text-2xl font-semibold text-navy">What you&apos;ll need</h2>
+          <ul className="mt-4 space-y-3 text-sm leading-6 text-slateDeep">
+            <li>• The document you plan to have notarized.</li>
+            <li>• A government-issued photo ID, if required by the online notarization provider or commissioned notary.</li>
+            <li>• A device with a camera and microphone, plus a reliable internet connection.</li>
+            <li>• A document that has not been signed yet, unless the commissioned notary instructs you otherwise.</li>
+          </ul>
+        </section>
         <TrackedScheduleAppointmentButtonLink href="/book" location="how_it_works" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
