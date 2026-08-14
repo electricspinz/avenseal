@@ -35,10 +35,9 @@ describe("Client Portal foundation", () => {
     render(<ClientPortalHome portal={projectPortal(status)} />);
     expect(screen.getByRole("heading", { name: "Welcome, Avery Doe" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Your Appointment Status" })).toBeTruthy();
-    expect(screen.getByText("Payment needed")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Preparation checklist" })).toBeTruthy();
     expect(screen.getByText("Document preparation is not yet confirmed in this workspace.")).toBeTruthy();
-    expect(screen.getAllByText("Payment needed").length).toBe(2);
+    expect(screen.getAllByText("Payment needed")).toHaveLength(2);
     expect(screen.getByRole("link", { name: "Contact Avenseal" }).getAttribute("href")).toBe("/contact");
     expect(screen.queryByRole("button", { name: /pay|upload|send/i })).toBeNull();
   });
