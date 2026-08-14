@@ -2,9 +2,79 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AdminAppointmentNextActionPanel } from "@/components/admin-appointment-next-action-panel";
+
 describe("AdminAppointmentNextActionPanel", () => {
-  it("renders one accessible CTA to the supplied existing section target", () => { render(<AdminAppointmentNextActionPanel action={{ kind: "review_payment", title: "Review payment", description: "Payment is required before the appointment can proceed.", tone: "warning", ctaLabel: "Review payment", targetId: "payment" }} />); expect(screen.getByRole("heading", { name: "Next Action" })).toBeTruthy(); expect(screen.getByRole("heading", { name: "Review payment" })).toBeTruthy(); expect(screen.getByRole("link", { name: "Review payment" }).getAttribute("href")).toBe("#payment"); });
-  it("does not invent a CTA when no existing action is available", () => { render(<AdminAppointmentNextActionPanel action={{ kind: "no_action_required", title: "No action required", description: "This appointment has been cancelled.", tone: "neutral" }} />); expect(screen.queryByRole("link")).toBeNull(); });
-  it("uses an existing full-page destination when supplied", () => { render(<AdminAppointmentNextActionPanel action={{ kind: "session_communication_failed", title: "Session communication failed", description: "Use the existing Communications Center.", tone: "danger", ctaLabel: "Open Communications Center", href: "/admin/communications" }} />); expect(screen.getByRole("link", { name: "Open Communications Center" }).getAttribute("href")).toBe("/admin/communications"); });
-  it("renders only supplied safe presentation text", () => { render(<AdminAppointmentNextActionPanel action={{ kind: "prepare_session", title: "Prepare notarization session", description: "Record the provider session details.", context: "The approved document is available under Documents for secure provider handoff.", tone: "info", ctaLabel: "Manage session", targetId: "external-session" }} />); const content = document.body.textContent ?? ""; expect(content).toContain("secure provider handoff"); expect(content).not.toContain("storage_key"); expect(content).not.toContain("https://provider.example"); });
+  it("renders one accessible CTA to the supplied existing section target", () => {
+    render(
+      <AdminAppointmentNextActionPanel
+        action={{
+          kind: "review_payment",
+          title: "Review payment",
+          description: "Payment is required before the appointment can proceed.",
+          tone: "warning",
+          ctaLabel: "Review payment",
+          targetId: "payment",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Next Action" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Review payment" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Review payment" }).getAttribute("href")).toBe("#payment");
+  });
+
+  it("does not invent a CTA when no existing action is available", () => {
+    render(
+      <AdminAppointmentNextActionPanel
+        action={{
+          kind: "no_action_required",
+          title: "No action required",
+          description: "This appointment has been cancelled.",
+          tone: "neutral",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("uses an existing full-page destination when supplied", () => {
+    render(
+      <AdminAppointmentNextActionPanel
+        action={{
+          kind: "session_communication_failed",
+          title: "Session communication failed",
+          description: "Use the existing Communications Center.",
+          tone: "danger",
+          ctaLabel: "Open Communications Center",
+          href: "/admin/communications",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Open Communications Center" }).getAttribute("href")).toBe(
+      "/admin/communications",
+    );
+  });
+
+  it("renders only supplied safe presentation text", () => {
+    render(
+      <AdminAppointmentNextActionPanel
+        action={{
+          kind: "prepare_session",
+          title: "Prepare notarization session",
+          description: "Record the provider session details.",
+          context: "The approved document is available under Documents for secure provider handoff.",
+          tone: "info",
+          ctaLabel: "Manage session",
+          targetId: "external-session",
+        }}
+      />,
+    );
+
+    const content = document.body.textContent ?? "";
+    expect(content).toContain("secure provider handoff");
+    expect(content).not.toContain("storage_key");
+    expect(content).not.toContain("https://provider.example");
+  });
 });

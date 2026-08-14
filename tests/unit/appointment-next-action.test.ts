@@ -1,16 +1,167 @@
 import { describe, expect, it } from "vitest";
-import { deriveAppointmentNextAction, type AppointmentNextActionInput } from "@/lib/server/appointment-next-action";
-const approvedDocument = { status: "approved", scanStatus: "clean", storageStatus: "active", deletedAt: null } as const;
-function input(overrides: Partial<AppointmentNextActionInput> = {}): AppointmentNextActionInput { return { appointmentStatus: "confirmed", paymentStatus: "paid", documents: [approvedDocument], externalSession: { status: "ready", customerVisible: true }, communications: [{ messageType: "external_session_available", status: "sent" }], ...overrides }; }
+import {
+  deriveAppointmentNextAction,
+  type AppointmentNextActionInput,
+} from "@/lib/server/appointment-next-action";
+
+const approvedDocument = {
+  status: "approved",
+  scanStatus: "clean",
+  storageStatus: "active",
+  deletedAt: null,
+} as const;
+
+function input(overrides: Partial<AppointmentNextActionInput> = {}): AppointmentNextActionInput {
+  return {
+    appointmentStatus: "confirmed",
+    paymentStatus: "paid",
+    documents: [approvedDocument],
+    externalSession: { status: "ready", customerVisible: true },
+    communications: [{ messageType: "external_session_available", status: "sent" }],
+    ...overrides,
+  };
+}
+
 describe("deriveAppointmentNextAction", () => {
-  it("keeps terminal and held appointment states ahead of every lower-priority record", () => { expect(deriveAppointmentNextAction(input({ appointmentStatus: "cancelled", paymentStatus: "disputed", documents: [{ ...approvedDocument, scanStatus: "failed" }], externalSession: { status: "cancelled", customerVisible: false } })).kind).toBe("no_action_required"); expect(deriveAppointmentNextAction(input({ appointmentStatus: "clarification_needed", paymentStatus: null, documents: [] })).kind).toBe("review_appointment"); });
-  it("keeps payment blockers ahead of documents and sessions", () => { expect(deriveAppointmentNextAction(input({ paymentStatus: "payment_processing", documents: [{ ...approvedDocument, scanStatus: "failed" }], externalSession: null })).kind).toBe("review_payment"); expect(deriveAppointmentNextAction(input({ paymentStatus: "disputed" })).kind).toBe("review_payment_status"); });
-  it("prioritizes document security over document review and avoids recovery claims", () => { expect(deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, scanStatus: "pending", storageStatus: "quarantined" }] })).kind).toBe("security_processing"); const security = deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, scanStatus: "infected", storageStatus: "quarantined" }] })); expect(security).toMatchObject({ kind: "review_document_security", title: "Document security review required", targetId: "documents" }); expect(security.description).not.toMatch(/resolve|recover|bypass/i); expect(deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, storageStatus: "removed" }] })).kind).toBe("review_document_security"); });
-  it("keeps rejected and uploaded review states ahead of session preparation", () => { const replacement = deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, status: "rejected" }] })); expect(replacement).toMatchObject({ kind: "waiting_for_replacement_document", title: "Waiting for replacement document", targetId: "client-workspace", ctaLabel: "View Client Workspace" }); expect(replacement.description).toMatch(/customer must upload a replacement/i); expect(deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, status: "uploaded" }] })).kind).toBe("review_uploaded_document"); });
-  it("moves from approved documents to session preparation without inferring provider upload", () => { const action = deriveAppointmentNextAction(input({ externalSession: null })); expect(action).toMatchObject({ kind: "prepare_session", title: "Prepare notarization session", targetId: "external-session", ctaLabel: "Manage session" }); expect(action.context).toBe("The approved document is available under Documents for secure provider handoff."); expect(action.description).not.toMatch(/uploaded to BlueNotary|identity verification|notarization is complete/i); });
-  it("prepares the provider session only after payment and document prerequisites", () => { expect(deriveAppointmentNextAction(input({ externalSession: { status: "scheduled", customerVisible: false } })).kind).toBe("prepare_session"); });
-  it("distinguishes absent, processing, and failed session communications", () => { expect(deriveAppointmentNextAction(input({ communications: [] })).kind).toBe("review_session_communication"); const queued = deriveAppointmentNextAction(input({ communications: [{ messageType: "external_session_available", status: "queued" }] })); expect(queued).toMatchObject({ kind: "session_communication_processing", title: "Session communication processing" }); expect(queued.ctaLabel).toBeUndefined(); const failed = deriveAppointmentNextAction(input({ communications: [{ messageType: "external_session_available", status: "failed" }] })); expect(failed).toMatchObject({ kind: "session_communication_failed", title: "Session communication failed", ctaLabel: "Open Communications Center", href: "/admin/communications" }); expect(deriveAppointmentNextAction(input()).kind).toBe("ready_for_appointment_review"); });
-  it("represents in-progress and completed sessions without inferring a notarial outcome", () => { const inProgress = deriveAppointmentNextAction(input({ externalSession: { status: "in_progress", customerVisible: true } })); expect(inProgress.kind).toBe("session_in_progress"); const completed = deriveAppointmentNextAction(input({ externalSession: { status: "completed", customerVisible: true } })); expect(completed.kind).toBe("confirm_appointment_outcome"); expect(completed.description).not.toMatch(/notarization is complete/i); expect(deriveAppointmentNextAction(input({ externalSession: { status: "cancelled", customerVisible: false } })).kind).toBe("resolve_cancelled_session"); });
-  it("uses completion communication wording", () => { expect(deriveAppointmentNextAction(input({ appointmentStatus: "completed" })).title).toBe("Review completion communications"); });
-  it("fails safely for unexpected values", () => { expect(deriveAppointmentNextAction(input({ appointmentStatus: "future_state" })).kind).toBe("review_appointment"); expect(deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, scanStatus: "unknown" }] })).kind).toBe("review_appointment"); expect(deriveAppointmentNextAction(input({ externalSession: { status: "unexpected" as "ready", customerVisible: false } })).kind).toBe("review_appointment"); });
+  it("keeps terminal and held appointment states ahead of every lower-priority record", () => {
+    expect(
+      deriveAppointmentNextAction(
+        input({
+          appointmentStatus: "cancelled",
+          paymentStatus: "disputed",
+          documents: [{ ...approvedDocument, scanStatus: "failed" }],
+          externalSession: { status: "cancelled", customerVisible: false },
+        }),
+      ).kind,
+    ).toBe("no_action_required");
+    expect(
+      deriveAppointmentNextAction(input({ appointmentStatus: "clarification_needed", paymentStatus: null, documents: [] })).kind,
+    ).toBe("review_appointment");
+  });
+
+  it("keeps payment blockers ahead of documents and sessions", () => {
+    expect(
+      deriveAppointmentNextAction(
+        input({
+          paymentStatus: "payment_processing",
+          documents: [{ ...approvedDocument, scanStatus: "failed" }],
+          externalSession: null,
+        }),
+      ).kind,
+    ).toBe("review_payment");
+    expect(deriveAppointmentNextAction(input({ paymentStatus: "disputed" })).kind).toBe("review_payment_status");
+  });
+
+  it("prioritizes document security over document review and avoids recovery claims", () => {
+    expect(
+      deriveAppointmentNextAction(
+        input({ documents: [{ ...approvedDocument, scanStatus: "pending", storageStatus: "quarantined" }] }),
+      ).kind,
+    ).toBe("security_processing");
+
+    const security = deriveAppointmentNextAction(
+      input({ documents: [{ ...approvedDocument, scanStatus: "infected", storageStatus: "quarantined" }] }),
+    );
+    expect(security).toMatchObject({
+      kind: "review_document_security",
+      title: "Document security review required",
+      targetId: "documents",
+    });
+    expect(security.description).not.toMatch(/resolve|recover|bypass/i);
+    expect(
+      deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, storageStatus: "removed" }] })).kind,
+    ).toBe("review_document_security");
+  });
+
+  it("keeps rejected and uploaded review states ahead of session preparation", () => {
+    const replacement = deriveAppointmentNextAction(
+      input({ documents: [{ ...approvedDocument, status: "rejected" }] }),
+    );
+    expect(replacement).toMatchObject({
+      kind: "waiting_for_replacement_document",
+      title: "Waiting for replacement document",
+      targetId: "client-workspace",
+      ctaLabel: "View Client Workspace",
+    });
+    expect(replacement.description).toMatch(/customer must upload a replacement/i);
+    expect(deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, status: "uploaded" }] })).kind).toBe(
+      "review_uploaded_document",
+    );
+  });
+
+  it("moves from approved documents to session preparation without inferring provider upload", () => {
+    const action = deriveAppointmentNextAction(input({ externalSession: null }));
+    expect(action).toMatchObject({
+      kind: "prepare_session",
+      title: "Prepare notarization session",
+      targetId: "external-session",
+      ctaLabel: "Manage session",
+    });
+    expect(action.context).toBe("The approved document is available under Documents for secure provider handoff.");
+    expect(action.description).not.toMatch(/uploaded to BlueNotary|identity verification|notarization is complete/i);
+  });
+
+  it("prepares the provider session only after payment and document prerequisites", () => {
+    expect(
+      deriveAppointmentNextAction(input({ externalSession: { status: "scheduled", customerVisible: false } })).kind,
+    ).toBe("prepare_session");
+  });
+
+  it("distinguishes absent, processing, and failed session communications", () => {
+    expect(deriveAppointmentNextAction(input({ communications: [] })).kind).toBe("review_session_communication");
+
+    const queued = deriveAppointmentNextAction(
+      input({ communications: [{ messageType: "external_session_available", status: "queued" }] }),
+    );
+    expect(queued).toMatchObject({
+      kind: "session_communication_processing",
+      title: "Session communication processing",
+    });
+    expect(queued.ctaLabel).toBeUndefined();
+
+    const failed = deriveAppointmentNextAction(
+      input({ communications: [{ messageType: "external_session_available", status: "failed" }] }),
+    );
+    expect(failed).toMatchObject({
+      kind: "session_communication_failed",
+      title: "Session communication failed",
+      ctaLabel: "Open Communications Center",
+      href: "/admin/communications",
+    });
+    expect(deriveAppointmentNextAction(input()).kind).toBe("ready_for_appointment_review");
+  });
+
+  it("represents in-progress and completed sessions without inferring a notarial outcome", () => {
+    const inProgress = deriveAppointmentNextAction(
+      input({ externalSession: { status: "in_progress", customerVisible: true } }),
+    );
+    expect(inProgress.kind).toBe("session_in_progress");
+
+    const completed = deriveAppointmentNextAction(
+      input({ externalSession: { status: "completed", customerVisible: true } }),
+    );
+    expect(completed.kind).toBe("confirm_appointment_outcome");
+    expect(completed.description).not.toMatch(/notarization is complete/i);
+    expect(
+      deriveAppointmentNextAction(input({ externalSession: { status: "cancelled", customerVisible: false } })).kind,
+    ).toBe("resolve_cancelled_session");
+  });
+
+  it("uses completion communication wording", () => {
+    expect(deriveAppointmentNextAction(input({ appointmentStatus: "completed" })).title).toBe(
+      "Review completion communications",
+    );
+  });
+
+  it("fails safely for unexpected values", () => {
+    expect(deriveAppointmentNextAction(input({ appointmentStatus: "future_state" })).kind).toBe("review_appointment");
+    expect(
+      deriveAppointmentNextAction(input({ documents: [{ ...approvedDocument, scanStatus: "unknown" }] })).kind,
+    ).toBe("review_appointment");
+    expect(
+      deriveAppointmentNextAction(
+        input({ externalSession: { status: "unexpected" as "ready", customerVisible: false } }),
+      ).kind,
+    ).toBe("review_appointment");
+  });
 });
