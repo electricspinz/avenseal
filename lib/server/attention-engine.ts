@@ -18,6 +18,9 @@ export type AttentionIssue = {
   createdAt: string | null;
   appointmentId?: string;
   customerName?: string | null;
+  appointmentDate?: string;
+  appointmentTime?: string;
+  presentation?: "action_required" | "waiting";
 };
 
 export type AttentionEngineRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations" | "getSettings">;

@@ -20,7 +20,7 @@ export function SystemHealthCard({ name, status, detail, href, linkLabel = "Open
   const state = statusCopy[status];
   const Icon = state.Icon;
   return (
-    <AdminCard className="flex min-h-44 flex-col p-4">
+    <AdminCard className="flex min-h-0 flex-col p-4">
       <h3 className="font-semibold text-navy">{name}</h3>
       <p className={`mt-3 flex items-center gap-2 text-sm font-semibold ${state.className}`}><Icon size={17} aria-hidden="true" />{state.label}</p>
       <p className="mt-2 text-sm leading-5 text-slateDeep">{detail}</p>
