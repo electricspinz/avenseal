@@ -83,12 +83,9 @@ export async function loadMissionControlViewModel(
     ],
     systemHealth: [
       communicationHealth(communicationMetrics),
-      reminderQueueHealth(),
       calendarHealth(integrations),
       stripeHealth(integrations),
-      blueNotaryHealth(),
-      documentProcessingHealth(),
-      aiConciergeHealth()
+      documentProcessingHealth()
     ],
     settings,
     readiness
@@ -160,11 +157,8 @@ function formatDate(now: Date, timezone: string) {
 function communicationHealth(metrics: Awaited<ReturnType<MissionControlRepository["getCommunicationMetrics"]>> | null): MissionControlHealthCard {
   if (!metrics) return { name: "Communications queue", status: "unknown", detail: "Communication queue metrics could not be loaded.", href: "/admin/communications", linkLabel: "Open communications" };
   if (metrics.failed > 0) return { name: "Communications queue", status: "attention", detail: `${metrics.failed} failed communication${metrics.failed === 1 ? " requires" : "s require"} review.`, href: "/admin/communications", linkLabel: "Open communications" };
-  return { name: "Communications queue", status: "healthy", detail: "Queue metrics loaded with no failed communications. Scheduler delivery is verified separately.", href: "/admin/communications", linkLabel: "Open communications" };
-}
-
-function reminderQueueHealth(): MissionControlHealthCard {
-  return { name: "Reminder scheduler", status: "needs_verification", detail: "Scheduler run health is not available from a durable operational source.", href: "/admin/communications", linkLabel: "Open communications" };
+  const queuedOrScheduled = metrics.queued + metrics.scheduled;
+  return { name: "Communications queue", status: "healthy", detail: `${queuedOrScheduled} queued or scheduled communication${queuedOrScheduled === 1 ? " is" : "s are"} recorded with no failed communications.`, href: "/admin/communications", linkLabel: "Open communications" };
 }
 
 function calendarHealth(integrations: Awaited<ReturnType<MissionControlRepository["listIntegrations"]>> | null): MissionControlHealthCard {
@@ -181,14 +175,6 @@ function stripeHealth(integrations: Awaited<ReturnType<MissionControlRepository[
   return { name: "Stripe", status: "needs_verification", detail: "Stripe configuration is recorded, but no live provider-health model verifies credentials or webhook delivery.", href: "/admin/settings/integrations", linkLabel: "Open integrations" };
 }
 
-function blueNotaryHealth(): MissionControlHealthCard {
-  return { name: "BlueNotary", status: "manual", detail: "External notarization sessions use a manual, trusted handoff from Appointment Details.", href: "/admin/appointments", linkLabel: "Open appointments" };
-}
-
 function documentProcessingHealth(): MissionControlHealthCard {
-  return { name: "Document processing", status: "disabled", detail: "Awaiting vendor and legal approval.", href: "/admin/appointments", linkLabel: "Open appointments" };
-}
-
-function aiConciergeHealth(): MissionControlHealthCard {
-  return { name: "AI concierge", status: "unavailable", detail: "AI concierge health is unavailable until an operational source is available.", href: "/admin/settings", linkLabel: "Open settings" };
+  return { name: "Document scanning", status: "unavailable", detail: "Document scanning is configured; worker health is not currently reported here.", href: "/admin/appointments", linkLabel: "Open appointments" };
 }

@@ -1,10 +1,12 @@
-import { loadAttentionIssues, type AttentionIssue } from "@/lib/server/attention-engine";
+import { compareAttentionIssues, loadAttentionIssues, type AttentionIssue } from "@/lib/server/attention-engine";
 import { loadMissionControlViewModel, type MissionControlViewModel } from "@/lib/server/mission-control";
+import { loadMissionControlAppointmentActions, type MissionControlAppointmentAction } from "@/lib/server/mission-control-next-actions";
 import { loadOperationsFeed, type OperationsFeedViewModel } from "@/lib/server/operations-feed";
 
 export type MissionControlDashboard = Readonly<{
   missionControl: MissionControlViewModel;
   attentionItems: readonly AttentionIssue[];
+  appointmentActions: readonly MissionControlAppointmentAction[];
   operationsFeed: OperationsFeedViewModel;
   communications: Readonly<{
     failed: number | null;
@@ -28,25 +30,30 @@ export type MissionControlDashboardDependencies = Readonly<{
   loadMissionControl: () => Promise<MissionControlViewModel>;
   loadAttention: () => Promise<AttentionIssue[]>;
   loadOperationsFeed: () => Promise<OperationsFeedViewModel>;
+  loadAppointmentActions: () => Promise<readonly MissionControlAppointmentAction[]>;
 }>;
 
 const dependencies: MissionControlDashboardDependencies = {
   loadMissionControl: () => loadMissionControlViewModel(),
   loadAttention: () => loadAttentionIssues(),
-  loadOperationsFeed: () => loadOperationsFeed()
+  loadOperationsFeed: () => loadOperationsFeed(),
+  loadAppointmentActions: () => loadMissionControlAppointmentActions()
 };
 
 export async function loadMissionControlDashboard(dataSource: MissionControlDashboardDependencies = dependencies): Promise<MissionControlDashboard> {
-  const [missionControl, attentionItems, operationsFeed] = await Promise.all([
+  const [missionControl, systemAttentionItems, operationsFeed, appointmentActions] = await Promise.all([
     dataSource.loadMissionControl(),
     dataSource.loadAttention(),
-    dataSource.loadOperationsFeed()
+    dataSource.loadOperationsFeed(),
+    dataSource.loadAppointmentActions()
   ]);
   const metric = (label: string) => missionControl.snapshot.find((item) => item.label === label)?.value ?? null;
 
   return {
     missionControl,
-    attentionItems,
+    attentionItems: [...systemAttentionItems, ...appointmentActions.flatMap((item) => item.attention ? [item.attention] : [])]
+      .sort(compareAttentionIssues),
+    appointmentActions,
     operationsFeed,
     communications: {
       failed: metric("Failed communications"),

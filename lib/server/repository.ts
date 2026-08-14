@@ -774,6 +774,41 @@ export const repository = {
       status: row.status as ExternalSessionStatus
     }));
   },
+  async listExternalSessionNextActionSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("external_sessions")
+      .select("organization_id,appointment_request_id,status,launch_url")
+      .eq("organization_id", organizationId)
+      .in("appointment_request_id", [...appointmentIds]);
+    if (error?.code === "PGRST205") return [];
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      status: String(row.status),
+      launchUrl: stringOrNull(row.launch_url),
+    }));
+  },
+  async listExternalSessionAvailableCommunicationSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("communication_messages")
+      .select("organization_id,appointment_request_id,message_type,status,created_at")
+      .eq("organization_id", organizationId)
+      .eq("message_type", "external_session_available")
+      .in("appointment_request_id", [...appointmentIds])
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      messageType: String(row.message_type),
+      status: String(row.status),
+    }));
+  },
   async listReadinessTransitionAlertSources() {
     if (!hasSupabaseServiceConfig()) return [];
     const organizationId = await resolvePublicOrganizationId();
