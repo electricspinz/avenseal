@@ -19,6 +19,7 @@ import { AdminAppointmentReschedule } from "@/components/admin-appointment-resch
 import { deriveAppointmentNextAction } from "@/lib/server/appointment-next-action";
 import { AdminAppointmentNextActionPanel } from "@/components/admin-appointment-next-action-panel";
 import { isCustomerVisibleExternalSession } from "@/lib/server/external-sessions";
+import { AdminProviderWorkspace } from "@/components/admin-provider-workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
         <div className="space-y-6">
           <AppointmentReadinessCard readiness={readiness} />
           <AdminAppointmentNextActionPanel action={nextAction} />
+          <AdminProviderWorkspace customerName={appointment.customer.fullName} serviceName={appointment.serviceNameSnapshot ?? "Service not recorded"} scheduledAt={`${formatDate(appointment.preferredDate)} at ${formatTime(appointment.preferredTime)}`} appointmentStatus={appointment.status} paymentStatus={payments[0]?.status ?? null} readinessSummary={readiness.summary} action={nextAction} communications={communications} documents={<AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} />} session={<ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />} />
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Customer</h2>
             <dl className="mt-4 grid gap-3 text-sm">
@@ -176,8 +178,6 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
               {communications.length === 0 && <p>No messages recorded yet.</p>}
             </div>
           </AdminCard></div>
-          <div id="external-session"><ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} /></div>
-          <div id="documents"><AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} /></div>
           <div id="client-workspace"><ClientWorkspaceAccessCard appointmentId={appointment.id} initial={clientAccess} /></div>
         </div>
         <div id="status-management"><AdminCard>
