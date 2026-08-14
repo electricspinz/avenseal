@@ -5,18 +5,23 @@ import type { AppointmentRequest, CommunicationMessage } from "@/lib/types";
 function appointment(overrides: Partial<AppointmentRequest> = {}): AppointmentRequest {
   return {
     id: "appointment-1", organizationId: "org-1", customerId: "customer-1", serviceId: "service-1", serviceNameSnapshot: "Remote notarization", serviceDurationMinutesSnapshot: 30, servicePriceCentsSnapshot: 2500, serviceCurrencySnapshot: "USD", status: "confirmed",
-    customer: { id: "customer-1", organizationId: "org-1", fullName: "Customer One", email: "customer@example.test", mobilePhone: null, createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z" },
+    customer: { id: "customer-1", organizationId: "org-1", fullName: "Customer One", email: "customer@example.test", mobilePhone: "555-0100", createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z" },
     documentCategory: "other", documentCount: 1, signerCount: 1, estimatedNotarizations: null, notarizationsNotSure: false, hasWitnessLines: null, witnessesAvailable: null, signerLocation: "Florida", allSignersHaveGovernmentId: true, preferredDate: "2026-08-20", preferredTime: "10:00", urgency: "specific_date", administrativeNotes: null, createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-02T00:00:00.000Z", ...overrides,
   };
 }
 
 const approvedDocument = { organizationId: "org-1", appointmentId: "appointment-1", status: "approved", scanStatus: "clean", storageStatus: "active", deletedAt: null };
 
-function communication(status: CommunicationMessage["status"]) {
+function communication(status: CommunicationMessage["status"]): Readonly<{
+  organizationId: string;
+  appointmentId: string;
+  messageType: CommunicationMessage["messageType"];
+  status: CommunicationMessage["status"];
+}> {
   return {
     organizationId: "org-1",
     appointmentId: "appointment-1",
-    messageType: "external_session_available" as CommunicationMessage["messageType"],
+    messageType: "external_session_available",
     status,
   };
 }

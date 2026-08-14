@@ -54,6 +54,27 @@ import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 type SupabaseRow = Record<string, unknown>;
 
+const communicationMessageStatuses = [
+  "queued",
+  "processing",
+  "sent",
+  "delivered",
+  "failed",
+  "skipped",
+  "cancelled",
+] as const satisfies readonly CommunicationMessage["status"][];
+
+function isCommunicationMessageStatus(value: unknown): value is CommunicationMessage["status"] {
+  return typeof value === "string" && communicationMessageStatuses.some((status) => status === value);
+}
+
+function communicationMessageStatus(value: unknown): CommunicationMessage["status"] {
+  if (!isCommunicationMessageStatus(value)) {
+    throw new Error("Invalid communication message status.");
+  }
+  return value;
+}
+
 export type AdminAppointmentRescheduleDiagnosticCategory =
   | "availability_preflight_failed"
   | "rpc_invalid_schedule_input"
@@ -791,7 +812,12 @@ export const repository = {
       launchUrl: stringOrNull(row.launch_url),
     }));
   },
-  async listExternalSessionAvailableCommunicationSources(appointmentIds: readonly string[]) {
+  async listExternalSessionAvailableCommunicationSources(appointmentIds: readonly string[]): Promise<Array<{
+    organizationId: string;
+    appointmentId: string;
+    messageType: CommunicationMessage["messageType"];
+    status: CommunicationMessage["status"];
+  }>> {
     if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
     const organizationId = await resolvePublicOrganizationId();
     const { data, error } = await getSupabaseAdmin()
@@ -806,7 +832,7 @@ export const repository = {
       organizationId: String(row.organization_id),
       appointmentId: String(row.appointment_request_id),
       messageType: String(row.message_type),
-      status: String(row.status),
+      status: communicationMessageStatus(row.status),
     }));
   },
   async listReadinessTransitionAlertSources() {
