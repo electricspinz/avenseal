@@ -8,7 +8,6 @@ import { calculateAppointmentReadiness, type AppointmentReadiness, type Appointm
 
 export type PortalAvailability = "available" | "unavailable";
 export type PortalItemState = "complete" | "current" | "pending" | "unavailable";
-export type ClientWorkspaceNextStep = Readonly<{ title: string; detail: string; actionLabel: string | null; actionUrl: string | null; tone: "neutral" | "warning" | "success" }>;
 export type CustomerReadinessState = "payment_needed" | "documents_needed" | "documents_under_review" | "replacement_needed" | "waiting_for_session" | "ready_for_notarization" | "session_in_progress" | "appointment_completed" | "appointment_cancelled" | "action_required";
 export type CustomerReadiness = Readonly<{ state: CustomerReadinessState; label: string; explanation: string; nextStep: string; tone: "neutral" | "warning" | "success" }>;
 
@@ -22,7 +21,6 @@ export type ClientPortalViewModel = Readonly<{
   externalSession: Readonly<{ availability: PortalAvailability; provider: string | null; sessionName: string | null }>;
   readiness: CustomerReadiness;
   checklist: readonly Readonly<{ id: string; label: string; state: PortalItemState; detail: string }> [];
-  nextStep: ClientWorkspaceNextStep;
 }>;
 
 export type ClientPortalDependencies = Readonly<{ getAppointmentByAccessToken: (token: string) => Promise<CustomerAppointmentStatus | null>; getExternalSession: (organizationId: string, appointmentId: string) => Promise<ExternalSession | null>; getCustomerDocuments?: (organizationId: string, appointmentId: string) => Promise<readonly CustomerDocumentStatus[]>; getReadinessDocuments?: (organizationId: string, appointmentId: string) => Promise<readonly AppointmentReadinessDocument[]> }>;
@@ -57,8 +55,7 @@ export function projectPortal(status: CustomerAppointmentStatus, externalSession
     communications: { availability: "unavailable", items: [], reason: "Communication history is not available through the current secure appointment link." },
     externalSession: session,
     readiness,
-    checklist,
-    nextStep: deriveClientWorkspaceNextStep(status, session)
+    checklist
   };
 }
 
@@ -68,7 +65,7 @@ export function customerReadinessFromCanonical(readiness: AppointmentReadiness):
     waiting_for_documents: { state: "documents_needed", label: "Upload your documents", explanation: "Upload the documents needed for your appointment.", nextStep: "Use the Documents section below.", tone: "warning" },
     waiting_for_review: { state: "documents_under_review", label: "Documents under review", explanation: "Your uploaded documents are being reviewed.", nextStep: "No action is needed right now.", tone: "neutral" },
     waiting_for_replacement: { state: "replacement_needed", label: "A replacement document is needed", explanation: "One of your documents needs to be replaced.", nextStep: "Open the Documents section below and upload a replacement.", tone: "warning" },
-    waiting_for_session: { state: "waiting_for_session", label: "Waiting for your online session", explanation: "Your payment and document preparation are complete. Your online notarization session will appear when it is ready.", nextStep: "Check back here or follow future Avenseal communications.", tone: "neutral" },
+    waiting_for_session: { state: "waiting_for_session", label: "Your online session is being prepared", explanation: "Your payment and document preparation are complete. Your online notarization session will appear here when it is ready.", nextStep: "Check back here or follow future Avenseal communications.", tone: "neutral" },
     ready_for_notary: { state: "ready_for_notarization", label: "Ready for your online notarization", explanation: "Your payment and document preparation are complete, and your online session is available.", nextStep: "Use the Online Notarization section below when it is time.", tone: "success" },
     in_progress: { state: "session_in_progress", label: "Your online session is in progress", explanation: "Continue through the online notarization session.", nextStep: "Use the Online Notarization section below.", tone: "success" },
     completed: { state: "appointment_completed", label: "Appointment completed", explanation: "Your appointment has been completed.", nextStep: "No further preparation is required.", tone: "success" },
@@ -89,7 +86,5 @@ function safelyCalculateReadiness(status: CustomerAppointmentStatus, externalSes
 export function deriveClientWorkspaceStatus(status: CustomerAppointmentStatus) { return status.customerStatusLabel || "Appointment scheduled"; }
 export function deriveClientWorkspaceSessionState(status: CustomerAppointmentStatus, session: ExternalSession | null) { return isCustomerVisibleExternalSession({ paymentStatus: status.paymentStatus, appointmentStatus: status.status, organizationId: status.organizationId, appointmentId: status.appointmentId, session }) ? { availability: "available" as const, provider: session!.provider, sessionName: session!.sessionName } : { availability: "unavailable" as const, provider: null, sessionName: null }; }
 export function deriveClientWorkspaceChecklist(status: CustomerAppointmentStatus, session: ClientPortalViewModel["externalSession"]) { const paid = status.paymentStatus === "paid"; const scheduled = ["confirmed", "ready", "completed"].includes(status.status); return [{ id: "appointment", label: "Appointment scheduled", state: scheduled ? "complete" : "current", detail: deriveClientWorkspaceStatus(status) }, { id: "contact", label: "Contact information confirmed", state: "complete", detail: "Your booking contact information is on file." }, { id: "payment", label: "Payment completed", state: paid ? "complete" : status.paymentStatus ? "current" : "unavailable", detail: paid ? "Payment is recorded as received." : status.paymentStatus ? `Payment is recorded as ${paymentLabel(status.paymentStatus)}.` : "Payment status is not available." }, { id: "documents", label: "Documents prepared", state: "unavailable", detail: "Document preparation is not yet confirmed in this workspace." }, { id: "id", label: "Government-issued photo ID", state: "pending", detail: "Have your government-issued photo ID ready." }, { id: "session", label: "Online session available", state: session.availability === "available" ? "complete" : "pending", detail: session.availability === "available" ? "Your online session is ready." : "Your online notarization session will appear here when it is ready." }] as const; }
-
-export function deriveClientWorkspaceNextStep(status: CustomerAppointmentStatus, session: ClientPortalViewModel["externalSession"]): ClientWorkspaceNextStep { if (status.status === "cancelled") return { title: "Appointment cancelled", detail: "This appointment has been cancelled.", actionLabel: null, actionUrl: null, tone: "warning" }; if (status.status === "completed") return { title: "Appointment completed", detail: "Your appointment journey is recorded as completed.", actionLabel: null, actionUrl: null, tone: "success" }; if (["payment_link_created", "payment_processing"].includes(status.paymentStatus ?? "")) return { title: "Complete payment", detail: "Payment is needed before your appointment can move forward.", actionLabel: status.checkoutUrl ? "Complete Payment" : null, actionUrl: status.checkoutUrl, tone: "warning" }; if (session.availability === "available") return { title: "Join online notarization", detail: "Continue with the independent remote online notarization provider.", actionLabel: "Join Online Notarization", actionUrl: null, tone: "success" }; return { title: "Waiting for online session", detail: "Your online notarization session will appear here when it is ready.", actionLabel: null, actionUrl: null, tone: "neutral" }; }
 
 function paymentLabel(status: PaymentStatus | null) { return status ? status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Unavailable"; }

@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ClientPortalHome } from "@/components/client-portal/client-portal-home";
-import { deriveClientWorkspaceNextStep, projectPortal, queryClientPortal } from "@/lib/server/client-portal";
+import { projectPortal, queryClientPortal, type CustomerReadiness } from "@/lib/server/client-portal";
 import type { CustomerAppointmentStatus } from "@/lib/types";
 
 const status: CustomerAppointmentStatus = { appointmentId: "appointment-1", organizationId: "organization-1", reference: "AVEN-1234", customerName: "Avery Doe", customerEmail: "avery@example.com", status: "awaiting_payment", customerStatusLabel: "Payment required", preferredDate: "2026-08-01", preferredTime: "10:00", timezone: "America/New_York", serviceName: "Remote online notarization", paymentStatus: "payment_link_created", amountDueCents: 2500, currency: "USD", checkoutUrl: "https://provider.example/secret", paymentExpiresAt: "2026-08-01T10:00:00.000Z", businessName: "Avenseal", businessEmail: "support@example.com", businessPhone: "555-0100", meetingUrl: null };
@@ -18,17 +18,17 @@ describe("Client Portal foundation", () => {
 
   it("uses payment before preparation and distinguishes unavailable domains", () => {
     const portal = projectPortal(status);
-    expect(portal.nextStep.title).toBe("Complete payment");
     expect(portal.documents.availability).toBe("available");
     expect(portal.workflow.availability).toBe("unavailable");
     expect(portal.checklist.find((item) => item.id === "payment")?.state).toBe("current");
   });
 
-  it("prioritizes cancelled and completed appointments over payment and session actions", () => {
-    const readySession = { availability: "available" as const, provider: "Provider", sessionName: "Session", launchUrl: "https://example.test", status: "ready" };
-    expect(deriveClientWorkspaceNextStep({ ...status, status: "cancelled" }, readySession).title).toBe("Appointment cancelled");
-    expect(deriveClientWorkspaceNextStep({ ...status, status: "completed" }, readySession).title).toBe("Appointment completed");
-    expect(deriveClientWorkspaceNextStep({ ...status, paymentStatus: null, checkoutUrl: null }, readySession).actionLabel).toBe("Join Online Notarization");
+  it("uses the canonical readiness result instead of a competing next-step decision", () => {
+    const readiness: CustomerReadiness = { state: "documents_needed", label: "Upload your documents", explanation: "Upload the documents needed for your appointment.", nextStep: "Use the Documents section below.", tone: "warning" };
+    const portal = projectPortal(status, null, [], readiness);
+
+    expect(portal.readiness).toEqual(readiness);
+    expect("nextStep" in portal).toBe(false);
   });
 
   it("renders accessible customer-facing sections without payment or mutation controls", () => {
@@ -38,6 +38,7 @@ describe("Client Portal foundation", () => {
     expect(screen.getByText("Payment needed")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Preparation checklist" })).toBeTruthy();
     expect(screen.getByText("Document preparation is not yet confirmed in this workspace.")).toBeTruthy();
+    expect(screen.getAllByText("Payment needed").length).toBe(2);
     expect(screen.getByRole("link", { name: "Contact Avenseal" }).getAttribute("href")).toBe("/contact");
     expect(screen.queryByRole("button", { name: /pay|upload|send/i })).toBeNull();
   });

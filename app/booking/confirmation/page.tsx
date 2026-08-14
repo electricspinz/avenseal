@@ -40,8 +40,12 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slateDeep">
                 {message}
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <ButtonLink href="/appointments/status" className="min-h-12 sm:min-w-60">Check Appointment Status</ButtonLink>
+              <div className="mt-8 rounded-lg border border-emeraldAction/30 bg-emeraldAction/10 p-5 text-slateDeep">
+                <p className="font-semibold text-navy">Check your email to open your appointment.</p>
+                <p className="mt-2 text-sm leading-6">A secure Client Workspace link has been sent to your booking email.</p>
+              </div>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <ButtonLink href="/appointments/access/request" className="min-h-12 sm:min-w-60">Request a New Secure Link</ButtonLink>
                 <Link className="focus-ring inline-flex min-h-12 items-center justify-center rounded-md border border-navy/55 px-6 text-sm font-semibold text-navy sm:min-w-56" href="/how-it-works">
                   Review Preparation Steps
                 </Link>
@@ -58,10 +62,10 @@ export default async function ConfirmationPage({ searchParams }: { searchParams:
               </div>
               <div className="mt-4 rounded-lg bg-white p-5 shadow-quiet">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slateDeep">Current status</p>
-                <p className="mt-2 font-semibold leading-6 text-navy">Awaiting Review</p>
+                <p className="mt-2 font-semibold leading-6 text-navy">We&rsquo;re reviewing your appointment request.</p>
               </div>
               <p className="mt-5 text-sm leading-6 text-slateDeep">
-                If email delivery is configured, we will send a secure link to check appointment status.
+                Need another link? Request a new secure link and we&rsquo;ll send one if your appointment is eligible.
               </p>
             </aside>
           </div>
