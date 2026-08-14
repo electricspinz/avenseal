@@ -1,7 +1,7 @@
 "use client";
 
 import Link, { type LinkProps } from "next/link";
-import type { ComponentProps } from "react";
+import React, { type ComponentProps } from "react";
 import { ButtonLink } from "@/components/button";
 import { trackScheduleAppointmentClick, type ScheduleAppointmentLocation } from "@/lib/analytics";
 
