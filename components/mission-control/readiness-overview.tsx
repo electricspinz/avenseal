@@ -11,9 +11,14 @@ const operationalStates: readonly AppointmentReadinessState[] = ["ready_for_nota
 
 export function MissionControlReadinessOverviewCard({ overview }: { overview: MissionControlReadinessOverview | null }) {
   return (
-    <section className="mt-8" aria-labelledby="appointment-readiness-overview-heading">
-      <SectionHeader id="appointment-readiness-overview-heading" title="Appointment readiness" />
-      {!overview ? <MissionControlEmptyState>Appointment readiness is unavailable because trusted appointment data could not be loaded.</MissionControlEmptyState> : <ReadinessOverview overview={overview} />}
+    <section className="mt-10" aria-labelledby="appointment-readiness-overview-heading">
+      <details>
+        <summary className="focus-ring cursor-pointer list-none rounded-md border border-silver bg-mist px-4 py-3 text-sm font-semibold text-navy">Appointment readiness overview</summary>
+        <div className="mt-4">
+          <SectionHeader id="appointment-readiness-overview-heading" title="Appointment readiness" />
+          {!overview ? <MissionControlEmptyState>Appointment readiness is unavailable because trusted appointment data could not be loaded.</MissionControlEmptyState> : <ReadinessOverview overview={overview} />}
+        </div>
+      </details>
     </section>
   );
 }

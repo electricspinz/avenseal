@@ -208,9 +208,19 @@ function attentionFromAction(appointment: AppointmentRequest, action: Appointmen
     source: "appointments",
     createdAt: appointment.updatedAt,
     appointmentId: appointment.id,
-    customerName: appointment.customer.fullName,
-  };
+      customerName: appointment.customer.fullName,
+      appointmentDate: appointment.preferredDate,
+      appointmentTime: appointment.preferredTime,
+      presentation: waitingActionKinds.has(action.kind) ? "waiting" : "action_required",
+    };
 }
+
+const waitingActionKinds = new Set([
+  "waiting_for_customer_document",
+  "waiting_for_replacement_document",
+  "security_processing",
+  "session_communication_processing",
+]);
 
 function priorityForAction(action: AppointmentNextAction): AttentionPriority {
   if (action.tone === "danger") return "critical";
