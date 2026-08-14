@@ -29,7 +29,7 @@ export default async function AdminDashboardPage() {
         communicationsUnavailable={missionControl.dailyBrief.communicationsUnavailable}
       />
       <section className="mt-7">
-        <AttentionPanel items={dashboard.attentionItems} />
+        <AttentionPanel items={dashboard.attentionItems} todayAppointmentIds={missionControl.schedule.appointments?.map((appointment) => appointment.id) ?? []} />
       </section>
       <section className="mt-8">
         <SchedulePanel

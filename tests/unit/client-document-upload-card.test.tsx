@@ -27,7 +27,7 @@ describe("ClientDocumentUploadCard", () => {
     expect(screen.getByRole("button", { name: "Uploading..." })).toHaveProperty("disabled", true);
     expect(document.body.textContent).not.toContain("magic token/private");
     resolveFetch(new Response(JSON.stringify({ status: "uploaded", document: { id: "document-1", originalFilename: "document.pdf", uploadedAt: "2026-08-01T10:00:00.000Z", status: "uploaded", replacementReason: null, storageKey: "private" } }), { headers: { "Content-Type": "application/json" } }));
-    await screen.findByText(/Document received\. You don’t need to stay on this page/);
+    await screen.findByText(/Document received\. We’re securely processing and reviewing your document/i);
     expect(screen.getByText("document.pdf")).toBeTruthy();
     expect(document.body.textContent).not.toContain("private");
   });
@@ -52,7 +52,7 @@ describe("ClientDocumentUploadCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload Replacement" }));
     selectFile(new File(["pdf"], "replacement.pdf", { type: "application/pdf" }));
     fireEvent.click(screen.getByRole("button", { name: "Upload replacement" }));
-    await screen.findByText("Replacement document received.");
+    await screen.findByText(/Replacement document received\. We’re securely processing and reviewing your document/i);
     expect(fetchMock.mock.calls[0][1].body.get("replacementDocumentId")).toBe("rejected-1");
     expect(screen.queryByText("A replacement document is needed")).toBeNull();
   });

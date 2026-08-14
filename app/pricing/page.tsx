@@ -46,7 +46,7 @@ export default async function PricingPage() {
             </div>
           )}
         </div>
-        <p className="mt-6 max-w-2xl text-sm leading-6 text-slateDeep">{settings.business.pricingNote}</p>
+        <p className="mt-6 max-w-2xl text-sm leading-6 text-slateDeep">Your total is shown before you complete secure payment.</p>
         <TrackedScheduleAppointmentButtonLink href="/book" location="pricing" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
       </section>
     </PublicShell>
