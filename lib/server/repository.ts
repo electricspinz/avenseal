@@ -54,6 +54,27 @@ import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 type SupabaseRow = Record<string, unknown>;
 
+const communicationMessageStatuses = [
+  "queued",
+  "processing",
+  "sent",
+  "delivered",
+  "failed",
+  "skipped",
+  "cancelled",
+] as const satisfies readonly CommunicationMessage["status"][];
+
+function isCommunicationMessageStatus(value: unknown): value is CommunicationMessage["status"] {
+  return typeof value === "string" && communicationMessageStatuses.some((status) => status === value);
+}
+
+function communicationMessageStatus(value: unknown): CommunicationMessage["status"] {
+  if (!isCommunicationMessageStatus(value)) {
+    throw new Error("Invalid communication message status.");
+  }
+  return value;
+}
+
 export type AdminAppointmentRescheduleDiagnosticCategory =
   | "availability_preflight_failed"
   | "rpc_invalid_schedule_input"
@@ -772,6 +793,46 @@ export const repository = {
       organizationId: row.organization_id,
       appointmentId: row.appointment_request_id,
       status: row.status as ExternalSessionStatus
+    }));
+  },
+  async listExternalSessionNextActionSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("external_sessions")
+      .select("organization_id,appointment_request_id,status,launch_url")
+      .eq("organization_id", organizationId)
+      .in("appointment_request_id", [...appointmentIds]);
+    if (error?.code === "PGRST205") return [];
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      status: String(row.status),
+      launchUrl: stringOrNull(row.launch_url),
+    }));
+  },
+  async listExternalSessionAvailableCommunicationSources(appointmentIds: readonly string[]): Promise<Array<{
+    organizationId: string;
+    appointmentId: string;
+    messageType: CommunicationMessage["messageType"];
+    status: CommunicationMessage["status"];
+  }>> {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("communication_messages")
+      .select("organization_id,appointment_request_id,message_type,status,created_at")
+      .eq("organization_id", organizationId)
+      .eq("message_type", "external_session_available")
+      .in("appointment_request_id", [...appointmentIds])
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      messageType: String(row.message_type),
+      status: communicationMessageStatus(row.status),
     }));
   },
   async listReadinessTransitionAlertSources() {

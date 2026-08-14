@@ -14,7 +14,7 @@ const severityClass = { info: "text-slateDeep", success: "text-emerald-800", war
 export function OperationsFeedFoundation({ feed }: { feed: OperationsFeedViewModel }) {
   return (
     <AdminCard className="mt-6">
-      <SectionHeader id="operations-feed-heading" title="Operations feed" />
+      <SectionHeader id="operations-feed-heading" title="Recent activity" />
       {feed.unavailableSources.length > 0 && <p className="mt-4 text-sm leading-6 text-slateDeep">Some activity sources are unavailable: {feed.unavailableSources.join(", ")}. Available activity is shown below.</p>}
       {feed.items.length === 0 ? <MissionControlEmptyState>No recent activity.</MissionControlEmptyState> : <ol className="mt-5 divide-y divide-silver">{feed.items.map((item) => <OperationsFeedRow key={item.id} item={item} />)}</ol>}
     </AdminCard>

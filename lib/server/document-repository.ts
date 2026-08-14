@@ -443,6 +443,23 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
         deletedAt: row.deleted_at
       }));
     },
+    async listNextActionSources(organizationId: string, appointmentIds: readonly string[]) {
+      if (appointmentIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("appointment_document_files")
+        .select("organization_id,appointment_request_id,status,scan_status,storage_status,deleted_at")
+        .eq("organization_id", organizationId)
+        .in("appointment_request_id", [...appointmentIds]);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        organizationId: String(row.organization_id),
+        appointmentId: String(row.appointment_request_id),
+        status: String(row.status),
+        scanStatus: row.scan_status === null || row.scan_status === undefined ? null : String(row.scan_status),
+        storageStatus: row.storage_status === null || row.storage_status === undefined ? null : String(row.storage_status),
+        deletedAt: row.deleted_at === null || row.deleted_at === undefined ? null : String(row.deleted_at),
+      }));
+    },
     async validateDocumentOwnership(organizationId: string, appointmentId: string, documentId: string) {
       const { data, error } = await supabase.from("appointment_document_files").select(documentSelect).eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).eq("id", documentId).is("deleted_at", null).maybeSingle();
       if (error) throw error;

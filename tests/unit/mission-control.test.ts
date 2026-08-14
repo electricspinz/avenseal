@@ -66,6 +66,7 @@ describe("Mission Control view model", () => {
     const attention = await loadMissionControlViewModel(source({ metrics: Promise.resolve({ ...metrics, failed: 2 }) }));
 
     expect(healthy.systemHealth[0].status).toBe("healthy");
+    expect(healthy.systemHealth[0].detail).toContain("3 queued or scheduled communications");
     expect(attention.systemHealth[0].status).toBe("attention");
   });
 
@@ -73,8 +74,8 @@ describe("Mission Control view model", () => {
     const connected = await loadMissionControlViewModel(source());
     const viewModel = await loadMissionControlViewModel(source({ integrations: Promise.resolve([{ provider: "google_calendar", status: "disconnected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }]) }));
 
-    expect(connected.systemHealth[2].status).toBe("connected");
-    expect(viewModel.systemHealth[2].status).toBe("attention");
+    expect(connected.systemHealth.find((card) => card.name === "Calendar sync")?.status).toBe("connected");
+    expect(viewModel.systemHealth.find((card) => card.name === "Calendar sync")?.status).toBe("attention");
   });
 
   it("does not infer a verified calendar connection or Stripe connectivity from incomplete integration data", async () => {
@@ -83,21 +84,25 @@ describe("Mission Control view model", () => {
       { provider: "stripe", status: "connected", accountLabel: "Stripe", lastConnectedAt: null, lastSyncedAt: null, lastError: null }
     ]) }));
 
-    expect(viewModel.systemHealth[2].status).toBe("needs_verification");
-    expect(viewModel.systemHealth[3].status).toBe("needs_verification");
+    expect(viewModel.systemHealth.find((card) => card.name === "Calendar sync")?.status).toBe("needs_verification");
+    expect(viewModel.systemHealth.find((card) => card.name === "Stripe")?.status).toBe("needs_verification");
   });
 
-  it("identifies the manual BlueNotary handoff and disabled document processing without exposing queue details", async () => {
+  it("does not infer scanner worker health from configuration", async () => {
     const viewModel = await loadMissionControlViewModel(source());
 
-    expect(viewModel.systemHealth[4]).toMatchObject({ name: "BlueNotary", status: "manual" });
-    expect(viewModel.systemHealth[5]).toEqual(expect.objectContaining({ name: "Document processing", status: "disabled", detail: "Awaiting vendor and legal approval." }));
+    expect(viewModel.systemHealth).toContainEqual(expect.objectContaining({
+      name: "Document scanning",
+      status: "unavailable",
+      detail: "Document scanning is configured; worker health is not currently reported here.",
+    }));
+    expect(viewModel.systemHealth.map((card) => card.name)).not.toContain("BlueNotary");
   });
 
   it("marks calendar health unknown when its integration source fails", async () => {
     const viewModel = await loadMissionControlViewModel(source({ integrations: Promise.reject(new Error("integrations unavailable")) }));
 
-    expect(viewModel.systemHealth[2].status).toBe("unknown");
+    expect(viewModel.systemHealth.find((card) => card.name === "Calendar sync")?.status).toBe("unknown");
   });
 
   it("keeps independent sections available when communications fail", async () => {

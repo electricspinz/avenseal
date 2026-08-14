@@ -16,11 +16,13 @@ export type AttentionIssue = {
   href: string;
   source: AttentionSource;
   createdAt: string | null;
+  appointmentId?: string;
+  customerName?: string | null;
 };
 
 export type AttentionEngineRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations" | "getSettings">;
 
-const priorityRank: Record<AttentionPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+export const attentionPriorityRank: Record<AttentionPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 export async function loadAttentionIssues(
   dataSource: AttentionEngineRepository = repository,
@@ -127,8 +129,8 @@ function unknownIssue(source: AttentionSource): AttentionIssue {
   };
 }
 
-function compareAttentionIssues(left: AttentionIssue, right: AttentionIssue) {
-  const priorityDifference = priorityRank[left.priority] - priorityRank[right.priority];
+export function compareAttentionIssues(left: AttentionIssue, right: AttentionIssue) {
+  const priorityDifference = attentionPriorityRank[left.priority] - attentionPriorityRank[right.priority];
   if (priorityDifference !== 0) return priorityDifference;
   const leftTimestamp = timestampValue(left.createdAt);
   const rightTimestamp = timestampValue(right.createdAt);
