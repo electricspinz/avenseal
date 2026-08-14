@@ -30,7 +30,7 @@ describe("BookingFlow consent", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    await waitFor(() => expect(screen.getByLabelText("Requested appointment time")).not.toBeDisabled());
+    await waitFor(() => expect((screen.getByLabelText("Requested appointment time") as HTMLSelectElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("heading", { name: "Add appointment details and consent." })).toBeTruthy();
