@@ -1,12 +1,18 @@
-import type React from "react";
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/public-shell", () => ({ PublicShell: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/components/brand", () => ({ Brand: () => null }));
-vi.mock("@/components/button", () => ({ ButtonLink: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+vi.mock("@/components/button", async () => {
+  const { createElement } = await vi.importActual<typeof import("react")>("react");
+  return { ButtonLink: ({ children, href }: { children: React.ReactNode; href: string }) => createElement("a", { href }, children) };
+});
 vi.mock("@/components/icons", () => ({ icons: { check: () => null } }));
-vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+vi.mock("next/link", async () => {
+  const { createElement } = await vi.importActual<typeof import("react")>("react");
+  return { default: ({ children, href }: { children: React.ReactNode; href: string }) => createElement("a", { href }, children) };
+});
 import ConfirmationPage from "@/app/booking/confirmation/page";
 
 describe("booking confirmation payment return copy", () => {

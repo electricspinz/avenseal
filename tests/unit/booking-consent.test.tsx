@@ -2,8 +2,11 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/brand", () => ({ Brand: () => <span>Avenseal</span> }));
-vi.mock("@/components/button", () => ({ Button: ({ children, ...props }: React.ComponentProps<"button">) => <button {...props}>{children}</button> }));
+vi.mock("@/components/brand", () => ({ Brand: () => "Avenseal" }));
+vi.mock("@/components/button", async () => {
+  const { createElement } = await vi.importActual<typeof import("react")>("react");
+  return { Button: ({ children, ...props }: React.ComponentProps<"button">) => createElement("button", props, children) };
+});
 vi.mock("@/lib/analytics", () => ({ trackAppointmentSelected: vi.fn(), trackBookingStarted: vi.fn(), trackBookingStepCompleted: vi.fn(), trackBookingSubmitted: vi.fn() }));
 
 import { BookingFlow } from "@/components/booking-flow";
