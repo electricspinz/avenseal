@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { appointmentStatusLabels, type AppointmentRequest, type AppointmentStatus } from "@/lib/types";
 
 const statuses = Object.entries(appointmentStatusLabels) as [AppointmentStatus, string][];
 
 export function AdminAppointmentForm({ appointment }: { appointment: AppointmentRequest }) {
+  const router = useRouter();
   const [status, setStatus] = useState<AppointmentStatus>(appointment.status);
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
@@ -18,7 +20,12 @@ export function AdminAppointmentForm({ appointment }: { appointment: Appointment
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, note: note || undefined })
     });
-    setMessage(response.ok ? "Appointment updated. Status history and audit records are created for status changes." : "Update failed.");
+    if (!response.ok) {
+      setMessage("Update failed.");
+      return;
+    }
+    setMessage("Appointment updated. Status history and audit records are created for status changes.");
+    router.refresh();
   }
 
   return (
