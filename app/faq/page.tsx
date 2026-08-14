@@ -1,3 +1,4 @@
+import React from "react";
 import { PublicShell } from "@/components/public-shell";
 import type { Metadata } from "next";
 
