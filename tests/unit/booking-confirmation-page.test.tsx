@@ -1,12 +1,18 @@
-import type React from "react";
+import React from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/public-shell", () => ({ PublicShell: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/components/brand", () => ({ Brand: () => null }));
-vi.mock("@/components/button", () => ({ ButtonLink: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("@/components/button", async () => {
+  const { createElement } = await vi.importActual<typeof import("react")>("react");
+  return { ButtonLink: ({ children, href }: { children: React.ReactNode; href: string }) => createElement("a", { href }, children) };
+});
 vi.mock("@/components/icons", () => ({ icons: { check: () => null } }));
-vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("next/link", async () => {
+  const { createElement } = await vi.importActual<typeof import("react")>("react");
+  return { default: ({ children, href }: { children: React.ReactNode; href: string }) => createElement("a", { href }, children) };
+});
 import ConfirmationPage from "@/app/booking/confirmation/page";
 
 describe("booking confirmation payment return copy", () => {
@@ -29,5 +35,9 @@ describe("booking confirmation payment return copy", () => {
     render(await ConfirmationPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByRole("heading", { name: "Thank you. Your request was received." })).toBeTruthy();
+    expect(screen.getByText("Check your email to open your appointment.")).toBeTruthy();
+    expect(screen.getByText(/secure Client Workspace link has been sent/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Request a New Secure Link" }).getAttribute("href")).toBe("/appointments/access/request");
+    expect(screen.queryByRole("link", { name: "Check Appointment Status" })).toBeNull();
   });
 });

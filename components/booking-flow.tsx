@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/button";
 import { icons } from "@/components/icons";
@@ -284,12 +285,15 @@ export function BookingFlow({
         );
       case 5:
         return (
-          <Question title="Add notes and consent." description="Only share administrative notes. Do not paste document contents or sensitive ID details.">
-            <Field label="Administrative notes"><textarea value={draft.administrativeNotes} onChange={(event) => update("administrativeNotes", event.target.value)} className="input min-h-28" /></Field>
-            <label className="flex items-start gap-3 rounded-lg border border-silver p-4 text-sm text-slateDeep">
-              <input type="checkbox" checked={draft.consentAccepted} onChange={(event) => update("consentAccepted", event.target.checked)} className="mt-1" />
-              I agree to the Privacy Policy and Terms.
-            </label>
+          <Question title="Add appointment details and consent." description="Only share appointment details. Do not paste document contents or sensitive ID details.">
+            <Field label="Appointment details"><textarea value={draft.administrativeNotes} onChange={(event) => update("administrativeNotes", event.target.value)} className="input min-h-28" /></Field>
+            <div className="rounded-lg border border-silver p-4 text-sm text-slateDeep">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" checked={draft.consentAccepted} onChange={(event) => update("consentAccepted", event.target.checked)} className="mt-1" />
+                I agree to the Privacy Policy and Terms of Service.
+              </label>
+              <p className="mt-3 pl-7 leading-6">Read the <Link className="focus-ring rounded underline" href="/privacy">Privacy Policy</Link> and <Link className="focus-ring rounded underline" href="/terms">Terms of Service</Link>.</p>
+            </div>
           </Question>
         );
       default:
@@ -312,7 +316,7 @@ export function BookingFlow({
         <section className="mx-auto w-full max-w-4xl px-5 py-7 lg:px-10">
           <div className="flex items-center justify-between">
             <Brand />
-            <span className="text-xs font-semibold text-slateDeep">Draft saved locally</span>
+            <span className="text-xs font-semibold text-slateDeep">Your progress is saved on this device</span>
           </div>
           <div className="mt-8">
             <div className="h-2 rounded-full bg-silver">
