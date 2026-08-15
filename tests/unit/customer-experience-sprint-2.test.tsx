@@ -23,7 +23,7 @@ describe("Customer Experience Sprint 2 public guidance", () => {
     render(<HowItWorksPage />);
     expect(screen.getByRole("heading", { name: /what you['’]ll need/i })).toBeTruthy();
     expect(screen.getByText(/device with a camera and microphone/i)).toBeTruthy();
-    expect(screen.getByText(/Do not sign the document until instructed/i)).toBeTruthy();
+    expect(screen.getByText("A document that has not been signed yet, unless the commissioned notary instructs you otherwise.")).toBeTruthy();
   });
 
   it("keeps a useful Help path alongside Schedule in the compact public header", () => {
