@@ -10,12 +10,13 @@ export const metadata: Metadata = {
     title: "Avenseal Frequently Asked Questions",
     description: "Common questions about remote online notary appointment requests and preparation.",
     url: "/faq",
-    images: ["/brand/avenseal-og-social.png"]
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
   },
   twitter: {
     card: "summary_large_image",
     title: "Avenseal Frequently Asked Questions",
-    description: "Common questions about remote online notary appointment requests and preparation."
+    description: "Common questions about remote online notary appointment requests and preparation.",
+    images: ["/brand/avenseal-og-social.png"]
   }
 };
 
@@ -33,9 +34,20 @@ const questions = [
   ["Does Avenseal guarantee notarization?", "No. A commissioned notary reviews each request and makes all notarial determinations during the session."]
 ];
 
+export const faqStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: questions.map(([name, text]) => ({
+    "@type": "Question",
+    name,
+    acceptedAnswer: { "@type": "Answer", text }
+  }))
+};
+
 export default function FAQPage() {
   return (
     <PublicShell>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }} />
       <section className="mx-auto max-w-4xl px-5 py-20 lg:px-8">
         <h1 className="text-5xl font-semibold text-navy">FAQ</h1>
         <div className="mt-10 divide-y divide-silver rounded-lg border border-silver">

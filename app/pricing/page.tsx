@@ -12,12 +12,13 @@ export const metadata: Metadata = {
     title: "Avenseal Pricing",
     description: "Review current pricing information for remote online notary appointment services.",
     url: "/pricing",
-    images: ["/brand/avenseal-og-social.png"]
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
   },
   twitter: {
     card: "summary_large_image",
     title: "Avenseal Pricing",
-    description: "Review current pricing information for remote online notary appointment services."
+    description: "Review current pricing information for remote online notary appointment services.",
+    images: ["/brand/avenseal-og-social.png"]
   }
 };
 
