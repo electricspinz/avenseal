@@ -21,7 +21,7 @@ describe("Customer Experience Sprint 2 public guidance", () => {
 
   it("explains only supported preparation requirements before booking", () => {
     render(<HowItWorksPage />);
-    expect(screen.getByRole("heading", { name: "What you’ll need" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /what you['’]ll need/i })).toBeTruthy();
     expect(screen.getByText(/device with a camera and microphone/i)).toBeTruthy();
     expect(screen.getByText(/Do not sign the document until instructed/i)).toBeTruthy();
   });
