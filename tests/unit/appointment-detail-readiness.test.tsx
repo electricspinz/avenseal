@@ -64,6 +64,7 @@ describe("Appointment Details readiness integration", () => {
     render(page);
     expect(screen.getByTestId("readiness-card").textContent).toContain("waiting_for_documents");
     expect(screen.getByTestId("next-action-panel").textContent).toContain("Waiting for customer document");
+    expect(screen.getByText("Appointment:").parentElement?.tagName).toBe("DIV");
     expect(mocks.deriveNextAction).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: "confirmed", paymentStatus: null, documents: [], externalSession: null, communications: [] }));
     expect(mocks.getHistory).toHaveBeenCalledWith("appointment-1");
     expect(mocks.getNotes).toHaveBeenCalledWith("appointment-1");
