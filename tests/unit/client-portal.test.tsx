@@ -24,7 +24,7 @@ describe("Client Portal foundation", () => {
   });
 
   it("uses the canonical readiness result instead of a competing next-step decision", () => {
-    const readiness: CustomerReadiness = { state: "documents_needed", label: "Upload your documents", explanation: "Upload the documents needed for your appointment.", nextStep: "Use the Documents section below.", tone: "warning" };
+    const readiness: CustomerReadiness = { state: "documents_needed", label: "Upload your document", explanation: "Upload the document needed for your appointment.", nextStep: "Use the Documents section below.", tone: "warning" };
     const portal = projectPortal(status, null, [], readiness);
 
     expect(portal.readiness).toEqual(readiness);
@@ -32,12 +32,15 @@ describe("Client Portal foundation", () => {
   });
 
   it("renders accessible customer-facing sections without payment or mutation controls", () => {
-    render(<ClientPortalHome portal={projectPortal(status)} />);
+    const documentReadinessPortal = projectPortal({ ...status, paymentStatus: "paid" });
+    render(<ClientPortalHome portal={documentReadinessPortal} />);
     expect(screen.getByRole("heading", { name: "Welcome, Avery Doe" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Your Appointment Status" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Preparation checklist" })).toBeTruthy();
-    expect(screen.getByText("Document preparation is not yet confirmed in this workspace.")).toBeTruthy();
-    expect(screen.getAllByText("Payment needed")).toHaveLength(2);
+    expect(documentReadinessPortal.readiness).toMatchObject({ state: "documents_needed", label: "Upload your document" });
+    expect(screen.getByText("Upload your document")).toBeTruthy();
+    expect(screen.getByText("Use the Documents section below.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Your next step" })).toBeNull();
     expect(screen.getByRole("link", { name: "Contact Avenseal" }).getAttribute("href")).toBe("/contact");
     expect(screen.queryByRole("button", { name: /pay|upload|send/i })).toBeNull();
   });
@@ -61,5 +64,10 @@ describe("Client Portal foundation", () => {
     expect(JSON.stringify(portal?.readiness)).not.toContain("private-reference");
     expect(JSON.stringify(portal?.readiness)).not.toContain("private-note");
     expect(JSON.stringify(portal?.readiness)).not.toContain("provider.example");
+  });
+
+  it("uses the canonical readiness state for customer-safe document checklist guidance", () => {
+    expect(projectPortal({ ...status, paymentStatus: "paid" }).readiness).toMatchObject({ state: "documents_needed", label: "Upload your document" });
+    expect(projectPortal({ ...status, status: "confirmed", paymentStatus: "paid" }, null, [], { state: "documents_under_review", label: "We’re reviewing your documents", explanation: "", nextStep: "", tone: "neutral" }).checklist.find((item) => item.id === "documents")).toMatchObject({ state: "current", detail: "Your document has been received and is being securely processed and reviewed." });
   });
 });

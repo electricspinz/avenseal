@@ -1,3 +1,4 @@
+import React from "react";
 import type { Metadata } from "next";
 import { PublicShell } from "@/components/public-shell";
 
@@ -20,10 +21,13 @@ export const metadata: Metadata = {
 };
 
 const effectiveDate = "August 9, 2026";
+const sections = ["1. Agreement to These Terms", "2. Eligibility", "3. Avenseal's Role", "4. Notarial Independence and Document Eligibility", "5. Appointment Requests, Responsibilities, and Preparation", "6. Identity Verification, Remote Sessions, and Third Parties", "7. Electronic Communications, Signatures, and Records", "8. Fees, Payment, Taxes, Cancellation, and Refunds", "9. Acceptable Use and Customer Materials", "10. Intellectual Property", "11. Availability, Changes, Suspension, and Termination", "12. Disclaimers", "13. Limitation of Liability", "14. Indemnification", "15. Governing Law and Disputes", "16. General Terms", "17. Contact Us"];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="mt-10"><h2 className="text-2xl font-semibold tracking-tight text-navy">{title}</h2><div className="mt-4 space-y-4 leading-7 text-slateDeep">{children}</div></section>;
+  return <section id={sectionId(title)} className="mt-10 scroll-mt-24"><h2 className="text-2xl font-semibold tracking-tight text-navy">{title}</h2><div className="mt-4 space-y-4 leading-7 text-slateDeep">{children}</div></section>;
 }
+
+function sectionId(title: string) { return `terms-${title.replace(/[^a-z0-9]+/gi, "-").replace(/(^-|-$)/g, "").toLowerCase()}`; }
 
 export default function TermsPage() {
   return (
@@ -31,6 +35,12 @@ export default function TermsPage() {
       <article className="mx-auto max-w-3xl px-5 py-16 lg:px-8">
         <h1 className="text-4xl font-semibold tracking-tight text-navy sm:text-5xl">Terms of Service</h1>
         <p className="mt-5 text-sm leading-6 text-slateDeep">Effective Date: {effectiveDate}<br />Last Updated: {effectiveDate}</p>
+        <nav aria-label="Terms of Service sections" className="mt-8 rounded-lg border border-silver bg-mist p-4">
+          <p className="text-sm font-semibold text-navy">On this page</p>
+          <ol className="mt-3 grid gap-x-5 gap-y-2 text-sm sm:grid-cols-2">
+            {sections.map((title) => <li key={title}><a className="focus-ring rounded text-slateDeep underline" href={`#${sectionId(title)}`}>{title}</a></li>)}
+          </ol>
+        </nav>
 
         <Section title="1. Agreement to These Terms">
           <p>These Terms of Service (&ldquo;Terms&rdquo;) are an agreement between you and Avenseal LLC, doing business as Avenseal (&ldquo;Avenseal,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;). They govern your use of avenseal.com, our booking and customer interfaces, appointment communications, and related services (collectively, the &ldquo;Services&rdquo;). By using the Services, requesting an appointment, or indicating acceptance during booking, you agree to these Terms and our <a className="focus-ring rounded underline" href="/privacy">Privacy Policy</a>.</p>
