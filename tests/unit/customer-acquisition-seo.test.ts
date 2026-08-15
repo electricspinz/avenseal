@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { organizationStructuredData } from "@/app/layout";
-import { faqStructuredData, metadata as faqMetadata } from "@/app/faq/page";
+import React from "react";
+import { render } from "@testing-library/react";
+import { organizationStructuredData } from "@/lib/structured-data";
+import FAQPage, { metadata as faqMetadata } from "@/app/faq/page";
 import { metadata as homeMetadata } from "@/app/page";
 import { metadata as pricingMetadata } from "@/app/pricing/page";
 import { metadata as howItWorksMetadata } from "@/app/how-it-works/page";
@@ -20,6 +22,23 @@ describe("Customer Acquisition Sprint 1 SEO foundation", () => {
   });
 
   it("derives FAQPage schema directly from the public FAQ content", () => {
+    render(React.createElement(FAQPage));
+
+    const schemaElement = document.querySelector(
+      'script[type="application/ld+json"]',
+    );
+    expect(schemaElement?.textContent).toBeTruthy();
+
+    const faqStructuredData = JSON.parse(schemaElement?.textContent ?? "") as {
+      "@context": string;
+      "@type": string;
+      mainEntity: Array<{
+        "@type": string;
+        name: string;
+        acceptedAnswer: { "@type": string; text: string };
+      }>;
+    };
+
     expect(faqStructuredData).toMatchObject({ "@context": "https://schema.org", "@type": "FAQPage" });
     expect(faqStructuredData.mainEntity).toHaveLength(11);
     expect(faqStructuredData.mainEntity).toEqual(expect.arrayContaining([

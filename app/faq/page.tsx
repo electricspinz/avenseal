@@ -34,7 +34,7 @@ const questions = [
   ["Does Avenseal guarantee notarization?", "No. A commissioned notary reviews each request and makes all notarial determinations during the session."]
 ];
 
-export const faqStructuredData = {
+const faqStructuredData = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
   mainEntity: questions.map(([name, text]) => ({
