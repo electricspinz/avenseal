@@ -1,6 +1,6 @@
 import React from "react";
 import { PublicShell } from "@/components/public-shell";
-import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
+import { TrackedMarketingLink, TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
 export default function HowItWorksPage() {
   return (
     <PublicShell>
-      <section className="mx-auto max-w-4xl px-5 py-20 lg:px-8">
-        <h1 className="text-5xl font-semibold text-navy">How It Works</h1>
+      <section className="mx-auto max-w-4xl px-5 py-12 sm:py-20 lg:px-8">
+        <h1 className="text-4xl font-semibold text-navy sm:text-5xl">How It Works</h1>
         <div className="mt-10 space-y-8">
           {[
             ["Request and schedule", "Share the administrative details needed for appointment review and select a requested time."],
@@ -48,7 +48,11 @@ export default function HowItWorksPage() {
             <li>• A document that has not been signed yet, unless the commissioned notary instructs you otherwise.</li>
           </ul>
         </section>
-        <TrackedScheduleAppointmentButtonLink href="/book" location="how_it_works" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <TrackedScheduleAppointmentButtonLink href="/book" location="how_it_works" className="w-full sm:w-auto">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+          <TrackedMarketingLink href="/pricing" cta="view_pricing" location="how_it_works" className="focus-ring inline-flex min-h-11 items-center justify-center rounded-md border border-navy/55 bg-white px-6 text-sm font-semibold text-navy transition hover:bg-mist">Review pricing</TrackedMarketingLink>
+        </div>
+        <TrackedMarketingLink href="/faq" cta="view_faq" location="how_it_works" className="focus-ring mt-6 inline-flex rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">Read common questions</TrackedMarketingLink>
       </section>
     </PublicShell>
   );

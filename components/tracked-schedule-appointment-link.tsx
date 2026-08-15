@@ -3,7 +3,13 @@
 import Link, { type LinkProps } from "next/link";
 import React, { type ComponentProps } from "react";
 import { ButtonLink } from "@/components/button";
-import { trackScheduleAppointmentClick, type ScheduleAppointmentLocation } from "@/lib/analytics";
+import {
+  trackMarketingCtaClick,
+  trackScheduleAppointmentClick,
+  type MarketingCtaLocation,
+  type MarketingCtaName,
+  type ScheduleAppointmentLocation
+} from "@/lib/analytics";
 
 type TrackedLinkProps = LinkProps & Omit<ComponentProps<typeof Link>, keyof LinkProps> & Readonly<{ location: ScheduleAppointmentLocation }>;
 
@@ -13,4 +19,13 @@ export function TrackedScheduleAppointmentLink({ location, onClick, ...props }: 
 
 export function TrackedScheduleAppointmentButtonLink({ location, onClick, ...props }: ComponentProps<typeof ButtonLink> & Readonly<{ location: ScheduleAppointmentLocation }>) {
   return <ButtonLink {...props} onClick={(event) => { trackScheduleAppointmentClick(location); onClick?.(event); }} />;
+}
+
+type TrackedMarketingLinkProps = LinkProps & Omit<ComponentProps<typeof Link>, keyof LinkProps> & Readonly<{
+  cta: MarketingCtaName;
+  location: MarketingCtaLocation;
+}>;
+
+export function TrackedMarketingLink({ cta, location, onClick, ...props }: TrackedMarketingLinkProps) {
+  return <Link {...props} onClick={(event) => { trackMarketingCtaClick(cta, location); onClick?.(event); }} />;
 }

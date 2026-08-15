@@ -1,5 +1,5 @@
 import { PublicShell } from "@/components/public-shell";
-import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
+import { TrackedMarketingLink, TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import { repository } from "@/lib/server/repository";
 import type { Metadata } from "next";
 
@@ -27,10 +27,11 @@ export default async function PricingPage() {
   const services = settings.services.filter(hasConfiguredPrice);
   return (
     <PublicShell>
-      <section className="mx-auto max-w-5xl px-5 py-20 lg:px-8">
-        <h1 className="text-5xl font-semibold text-navy">Pricing</h1>
+      <section className="mx-auto max-w-5xl px-5 py-12 sm:py-20 lg:px-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-emeraldAction">Clear pricing before payment</p>
+        <h1 className="mt-3 text-4xl font-semibold text-navy sm:text-5xl">Pricing</h1>
         <p className="mt-5 max-w-2xl text-xl leading-8 text-slateDeep">
-          Current pricing is shown before payment is requested.
+          Review the current service price, then request an appointment when you&apos;re ready.
         </p>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
           {services.map((service) => (
@@ -47,8 +48,20 @@ export default async function PricingPage() {
             </div>
           )}
         </div>
-        <p className="mt-6 max-w-2xl text-sm leading-6 text-slateDeep">Your total is shown before you complete secure payment.</p>
-        <TrackedScheduleAppointmentButtonLink href="/book" location="pricing" className="mt-10">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+        <div className="mt-6 rounded-lg border border-silver bg-mist px-5 py-4 text-sm leading-6 text-slateDeep">
+          <p className="font-semibold text-navy">What to expect</p>
+          <p className="mt-1">Your total is shown before you complete secure payment. After booking, your appointment email includes a secure Client Workspace link for preparation and next steps.</p>
+        </div>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <TrackedScheduleAppointmentButtonLink href="/book" location="pricing" className="w-full sm:w-auto">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+          <TrackedMarketingLink href="/how-it-works" cta="view_how_it_works" location="pricing" className="focus-ring inline-flex min-h-11 items-center justify-center rounded-md border border-navy/55 bg-white px-6 text-sm font-semibold text-navy transition hover:bg-mist">
+            Review how it works
+          </TrackedMarketingLink>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-x-5 gap-y-3 text-sm font-semibold text-navy">
+          <TrackedMarketingLink href="/faq" cta="view_faq" location="pricing" className="focus-ring rounded-md underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">Questions about your appointment?</TrackedMarketingLink>
+          <TrackedMarketingLink href="/about" cta="view_about" location="pricing" className="focus-ring rounded-md underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">About Avenseal&apos;s role</TrackedMarketingLink>
+        </div>
       </section>
     </PublicShell>
   );

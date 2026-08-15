@@ -8,15 +8,16 @@ export function PublicHeader() {
     <header className="sticky top-0 z-30 border-b border-silver/70 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
         <Brand />
-        <nav className="hidden items-center gap-8 text-sm font-semibold text-navy md:flex" aria-label="Primary navigation">
+        <nav className="hidden items-center gap-6 text-sm font-semibold text-navy md:flex" aria-label="Primary navigation">
           <Link className="focus-ring rounded-md" href="/how-it-works">How It Works</Link>
           <Link className="focus-ring rounded-md" href="/pricing">Pricing</Link>
           <Link className="focus-ring rounded-md" href="/faq">FAQ</Link>
-          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="px-5">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+          <Link className="focus-ring rounded-md" href="/about">About</Link>
+          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="shrink-0 px-5">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
         </nav>
         <div className="flex items-center gap-3 md:hidden">
-          <Link className="focus-ring rounded-md text-sm font-semibold text-navy" href="/faq">Help</Link>
-          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header">Schedule</TrackedScheduleAppointmentButtonLink>
+          <Link className="focus-ring inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-navy" href="/faq">Help</Link>
+          <TrackedScheduleAppointmentButtonLink href="/book" location="public_header" className="shrink-0 px-4">Schedule</TrackedScheduleAppointmentButtonLink>
         </div>
       </div>
     </header>
