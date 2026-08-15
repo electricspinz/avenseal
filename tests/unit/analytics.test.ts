@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { trackAppointmentSelected, trackBeginCheckout, trackBlueNotaryHandoff, trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted, trackPageView, trackScheduleAppointmentClick } from "@/lib/analytics";
+import { trackAppointmentSelected, trackBeginCheckout, trackBlueNotaryHandoff, trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted, trackMarketingCtaClick, trackPageView, trackScheduleAppointmentClick } from "@/lib/analytics";
 
 const gtag = vi.fn();
 
@@ -19,6 +19,7 @@ describe("analytics", () => {
 
     trackPageView("/pricing");
     trackScheduleAppointmentClick("pricing");
+    trackMarketingCtaClick("view_how_it_works", "pricing");
     trackBookingStarted();
     trackBookingStepCompleted("customer_details", 1);
     trackAppointmentSelected("next_available");
@@ -29,6 +30,7 @@ describe("analytics", () => {
     expect(gtag.mock.calls).toEqual([
       ["event", "page_view", { page_path: "/pricing" }],
       ["event", "schedule_appointment_click", { location: "pricing" }],
+      ["event", "marketing_cta_click", { cta: "view_how_it_works", location: "pricing" }],
       ["event", "booking_started", {}],
       ["event", "booking_step_completed", { step_name: "customer_details", step_number: 1 }],
       ["event", "appointment_selected", { service_category: "remote_online_notary", urgency: "next_available" }],

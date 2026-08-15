@@ -1,7 +1,6 @@
 import { icons } from "@/components/icons";
 import { PublicShell } from "@/components/public-shell";
-import { ButtonLink } from "@/components/button";
-import { TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
+import { TrackedMarketingLink, TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import { repository } from "@/lib/server/repository";
 import type { Metadata } from "next";
 
@@ -62,18 +61,24 @@ export default async function HomePage() {
   return (
     <PublicShell>
       <section className="relative overflow-hidden bg-white">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 md:grid-cols-[0.95fr_1.05fr] md:py-24 lg:px-8">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-5 py-12 sm:py-16 md:grid-cols-[0.95fr_1.05fr] md:py-24 lg:px-8">
           <div>
-            <h1 className="max-w-2xl text-5xl font-semibold leading-[1.03] tracking-normal text-navy md:text-6xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-emeraldAction">Florida remote online notary appointments</p>
+            <h1 className="mt-3 max-w-2xl text-4xl font-semibold leading-[1.03] tracking-normal text-navy sm:text-5xl md:text-6xl">
               Remote online notary appointments, coordinated clearly.
             </h1>
-            <p className="mt-6 max-w-xl text-xl leading-8 text-slateDeep">
+            <p className="mt-5 max-w-xl text-lg leading-8 text-slateDeep sm:text-xl">
               Request your Florida remote online notary appointment, prepare with confidence, and join the provider-hosted session with a commissioned notary.
             </p>
-            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <TrackedScheduleAppointmentButtonLink href="/book" location="homepage_hero">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
-              <ButtonLink href="/how-it-works" variant="secondary">How It Works</ButtonLink>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <TrackedScheduleAppointmentButtonLink href="/book" location="homepage_hero" className="w-full sm:w-auto">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+              <TrackedMarketingLink href="/how-it-works" cta="view_how_it_works" location="homepage_hero" className="focus-ring inline-flex min-h-11 items-center justify-center rounded-md border border-navy/55 bg-white px-6 text-sm font-semibold text-navy transition hover:bg-mist">
+                See how it works
+              </TrackedMarketingLink>
             </div>
+            <TrackedMarketingLink href="/pricing" cta="view_pricing" location="homepage_hero" className="focus-ring mt-4 inline-flex rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">
+              Review pricing before you request
+            </TrackedMarketingLink>
           </div>
           <HeroSessionIllustration />
         </div>
@@ -92,7 +97,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section id="how-it-works" className="bg-mist py-20">
+      <section id="how-it-works" className="bg-mist py-14 sm:py-20">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <h2 className="text-center text-4xl font-semibold text-navy">How It Works</h2>
           <div className="mt-14 grid gap-10 md:grid-cols-3">
@@ -110,7 +115,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="bg-white py-20">
+      <section className="bg-white py-14 sm:py-20">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 md:grid-cols-2 lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-emeraldAction">Why choose Avenseal</p>
@@ -126,6 +131,9 @@ export default async function HomePage() {
                 </li>
               ))}
             </ul>
+            <TrackedMarketingLink href="/about" cta="view_about" location="homepage_service_overview" className="focus-ring mt-7 inline-flex rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">
+              Learn about Avenseal&apos;s role
+            </TrackedMarketingLink>
           </div>
           <div aria-hidden="true" className="rounded-lg border border-silver bg-white p-4 shadow-quiet">
             <div className="aspect-[4/3] rounded-md bg-mist p-8">
@@ -152,7 +160,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="bg-mist py-20">
+      <section className="bg-mist py-14 sm:py-20">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="text-center">
             <h2 className="text-4xl font-semibold text-navy">Service and pricing overview</h2>
@@ -172,10 +180,15 @@ export default async function HomePage() {
               </div>
             ))}
           </div>
+          <div className="mt-8 text-center">
+            <TrackedMarketingLink href="/pricing" cta="view_pricing" location="homepage_service_overview" className="focus-ring inline-flex rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">
+              View pricing details
+            </TrackedMarketingLink>
+          </div>
         </div>
       </section>
 
-      <section className="bg-white py-20">
+      <section className="bg-white py-14 sm:py-20">
         <div className="mx-auto grid max-w-7xl gap-12 px-5 md:grid-cols-[1fr_0.7fr] lg:px-8">
           <div>
             <h2 className="text-3xl font-semibold text-navy">Frequently Asked Questions</h2>
@@ -187,6 +200,9 @@ export default async function HomePage() {
                 </details>
               ))}
             </div>
+            <TrackedMarketingLink href="/faq" cta="view_faq" location="homepage_faq" className="focus-ring mt-6 inline-flex rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">
+              Explore all questions
+            </TrackedMarketingLink>
           </div>
           <div className="grid place-items-center rounded-lg bg-mist p-10">
             <div className="grid h-32 w-32 place-items-center rounded-md border border-navy/25 bg-white text-emeraldAction">

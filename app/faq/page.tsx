@@ -1,5 +1,6 @@
 import React from "react";
 import { PublicShell } from "@/components/public-shell";
+import { TrackedMarketingLink, TrackedScheduleAppointmentButtonLink } from "@/components/tracked-schedule-appointment-link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -48,8 +49,8 @@ export default function FAQPage() {
   return (
     <PublicShell>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqStructuredData) }} />
-      <section className="mx-auto max-w-4xl px-5 py-20 lg:px-8">
-        <h1 className="text-5xl font-semibold text-navy">FAQ</h1>
+      <section className="mx-auto max-w-4xl px-5 py-12 sm:py-20 lg:px-8">
+        <h1 className="text-4xl font-semibold text-navy sm:text-5xl">FAQ</h1>
         <div className="mt-10 divide-y divide-silver rounded-lg border border-silver">
           {questions.map(([question, answer]) => (
             <details key={question} className="p-6">
@@ -58,6 +59,16 @@ export default function FAQPage() {
             </details>
           ))}
         </div>
+        <section className="mt-10 rounded-lg bg-mist p-6 sm:flex sm:items-center sm:justify-between sm:gap-8 sm:p-8" aria-labelledby="faq-next-step">
+          <div>
+            <h2 id="faq-next-step" className="text-2xl font-semibold text-navy">Ready to request an appointment?</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slateDeep">Review pricing or request your appointment when you&apos;re ready.</p>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 sm:mt-0 sm:shrink-0">
+            <TrackedScheduleAppointmentButtonLink href="/book" location="faq" className="w-full">Schedule Appointment</TrackedScheduleAppointmentButtonLink>
+            <TrackedMarketingLink href="/pricing" cta="view_pricing" location="faq" className="focus-ring inline-flex min-h-11 items-center justify-center rounded-md text-sm font-semibold text-navy underline decoration-emeraldAction decoration-2 underline-offset-4 hover:text-emeraldAction">Review pricing</TrackedMarketingLink>
+          </div>
+        </section>
       </section>
     </PublicShell>
   );

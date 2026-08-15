@@ -1,10 +1,13 @@
 import { currentPartnerCode } from "@/lib/partner-attribution";
 
-export type ScheduleAppointmentLocation = "homepage_hero" | "homepage_footer" | "public_header" | "pricing" | "how_it_works";
+export type ScheduleAppointmentLocation = "homepage_hero" | "homepage_footer" | "public_header" | "pricing" | "how_it_works" | "about" | "faq";
+export type MarketingCtaName = "view_how_it_works" | "view_pricing" | "view_faq" | "view_about";
+export type MarketingCtaLocation = "homepage_hero" | "homepage_service_overview" | "homepage_faq" | "pricing" | "how_it_works" | "about" | "faq";
 
 type AnalyticsEvent =
   | Readonly<{ name: "page_view"; parameters: Readonly<{ page_path: string }> }>
   | Readonly<{ name: "schedule_appointment_click"; parameters: Readonly<{ location: ScheduleAppointmentLocation }> }>
+  | Readonly<{ name: "marketing_cta_click"; parameters: Readonly<{ cta: MarketingCtaName; location: MarketingCtaLocation }> }>
   | Readonly<{ name: "booking_started"; parameters: Readonly<{ partner_code?: string }> }>
   | Readonly<{ name: "booking_step_completed"; parameters: Readonly<{ step_name: string; step_number: number }> }>
   | Readonly<{ name: "appointment_selected"; parameters: Readonly<{ service_category: "remote_online_notary"; urgency: "same_day" | "next_available" | "specific_date" | "not_urgent" }> }>
@@ -47,6 +50,10 @@ export function trackPageView(pathname: string) {
 
 export function trackScheduleAppointmentClick(location: ScheduleAppointmentLocation) {
   send({ name: "schedule_appointment_click", parameters: { location } });
+}
+
+export function trackMarketingCtaClick(cta: MarketingCtaName, location: MarketingCtaLocation) {
+  send({ name: "marketing_cta_click", parameters: { cta, location } });
 }
 
 export function trackBookingStarted() {
