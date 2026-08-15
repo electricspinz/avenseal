@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { organizationStructuredData } from "@/lib/structured-data";
 import "./globals.css";
-
-const organizationSchema = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "Avenseal",
-  legalName: "Avenseal LLC",
-  url: "https://www.avenseal.com",
-  telephone: "+1-727-433-8565",
-  email: "appointments@avenseal.com",
-  description: "Avenseal coordinates Florida remote online notary appointment requests, payments, preparation, and customer-facing appointment access.",
-  openingHours: "Mo-Fr 09:30-17:30"
-};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.avenseal.com"),
@@ -47,7 +36,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   <script
     type="application/ld+json"
     dangerouslySetInnerHTML={{
-      __html: JSON.stringify(organizationSchema),
+      __html: JSON.stringify(organizationStructuredData),
     }}
   />
 

@@ -14,12 +14,13 @@ export const metadata: Metadata = {
     title: "Avenseal | Remote Online Notary Appointments",
     description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
     url: "/",
-    images: ["/brand/avenseal-og-social.png"]
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
   },
   twitter: {
     card: "summary_large_image",
     title: "Avenseal | Remote Online Notary Appointments",
-    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session."
+    description: "Request a Florida remote online notary appointment with clear preparation and a provider-hosted online session.",
+    images: ["/brand/avenseal-og-social.png"]
   }
 };
 

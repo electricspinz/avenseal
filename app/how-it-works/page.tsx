@@ -11,12 +11,13 @@ export const metadata: Metadata = {
     title: "How Remote Online Notary Appointments Work",
     description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary.",
     url: "/how-it-works",
-    images: ["/brand/avenseal-og-social.png"]
+    images: [{ url: "/brand/avenseal-og-social.png", width: 1734, height: 907, alt: "Avenseal — Trust Every Signature." }]
   },
   twitter: {
     card: "summary_large_image",
     title: "How Remote Online Notary Appointments Work",
-    description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary."
+    description: "Request an appointment, complete identity verification with the online notarization provider, and meet with a commissioned notary.",
+    images: ["/brand/avenseal-og-social.png"]
   }
 };
 
