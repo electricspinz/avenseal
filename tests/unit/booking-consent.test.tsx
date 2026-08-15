@@ -2,6 +2,18 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  const createElement = (type: string | React.JSXElementConstructor<unknown>, props: Record<string, unknown> | null, ...children: React.ReactNode[]) => {
+    if (type !== "style" || !props) return actual.createElement(type, props, ...children);
+    const styleProps = { ...props };
+    delete styleProps.jsx;
+    delete styleProps.global;
+    return actual.createElement(type, styleProps, ...children);
+  };
+  return { ...actual, default: { ...actual, createElement } };
+});
+
 vi.mock("@/components/brand", () => ({ Brand: () => "Avenseal" }));
 vi.mock("@/components/button", async () => {
   const { createElement } = await vi.importActual<typeof import("react")>("react");
