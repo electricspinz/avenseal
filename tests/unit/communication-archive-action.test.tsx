@@ -32,4 +32,13 @@ describe("CommunicationArchiveAction", () => {
     rerender(<CommunicationArchiveAction messageId={null} archived={false} />);
     expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
   });
+
+  it("does not refresh after a failed archive request", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 500 }));
+    render(<CommunicationArchiveAction messageId="message-1" archived={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Communication archiving is unavailable. Please try again."));
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
 });

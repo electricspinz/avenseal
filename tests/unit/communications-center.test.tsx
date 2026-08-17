@@ -1,9 +1,12 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CommunicationList, CommunicationsErrorState, CommunicationsFilters, CommunicationsLoadingState } from "@/components/communications-center";
 import { normalizeQuery, queryCommunicationsCenter, type CommunicationsCenterRepository } from "@/lib/server/communications-center";
 import type { AdminCommunication } from "@/lib/types";
+
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 const record: AdminCommunication = { id: "m:communication-1", source: "message", messageId: "communication-1", appointmentId: "appointment-1", customerId: "customer-1", customerName: "Jordan Lee", messageType: "appointment_reminder_24h", recipientEmail: "jordan@example.com", subject: "Reminder", bodyHtml: null, status: "sent", scheduledFor: null, queuedAt: "2026-07-29T10:00:00.000Z", sentAt: "2026-07-29T10:05:00.000Z", attemptCount: 1, lastAttemptedAt: "2026-07-29T10:05:00.000Z", lastError: null, providerMessageId: "provider-secret", createdAt: "2026-07-29T10:00:00.000Z", updatedAt: "2026-07-29T10:05:00.000Z", archivedAt: null };
 
