@@ -303,6 +303,7 @@ export interface AdminCommunication {
   providerMessageId: string | null;
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
 }
 
 export interface AdminCommunicationPage {

@@ -53,6 +53,7 @@ import type {
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 type SupabaseRow = Record<string, unknown>;
+type CommunicationArchiveRpcRow = Readonly<{ id: string; archived_at: string | null }>;
 
 const communicationMessageStatuses = [
   "queued",
@@ -287,6 +288,15 @@ function stringOrNull(value: unknown) {
   return typeof value === "string" ? value : null;
 }
 
+function parseCommunicationArchiveRpcRow(value: unknown): CommunicationArchiveRpcRow | null {
+  if (!isSupabaseRow(value) || typeof value.id !== "string" || (value.archived_at !== null && typeof value.archived_at !== "string")) return null;
+  return { id: value.id, archived_at: value.archived_at };
+}
+
+function isSupabaseRow(value: unknown): value is SupabaseRow {
+  return typeof value === "object" && value !== null;
+}
+
 function mapBusiness(org: SupabaseRow, settings: SupabaseRow): BusinessSettings {
   return {
     organizationId: String(settings.organization_id ?? org.id),
@@ -418,7 +428,8 @@ function mapAdminCommunication(row: SupabaseRow): AdminCommunication {
     lastError: stringOrNull(row.last_error),
     providerMessageId: stringOrNull(row.provider_message_id),
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
+    archivedAt: stringOrNull(row.archived_at)
   };
 }
 
@@ -1344,7 +1355,7 @@ export const repository = {
     if (error && error.code !== "PGRST205") throw error;
     return (data ?? []).map(mapCommunication);
   },
-  async listAdminCommunications(filters: { page?: number; status?: string; type?: string } = {}): Promise<AdminCommunicationPage> {
+  async listAdminCommunications(filters: { page?: number; status?: string; type?: string; includeArchived?: boolean } = {}): Promise<AdminCommunicationPage> {
     const pageSize = 25;
     const currentPage = Math.max(filters.page ?? 1, 1);
     if (!hasSupabaseServiceConfig()) return { records: [], currentPage, totalPages: 1, totalRecords: 0 };
@@ -1355,6 +1366,7 @@ export const repository = {
       .eq("organization_id", organizationId);
     if (filters.status) query = query.eq("status", filters.status);
     if (filters.type) query = query.eq("message_type", filters.type);
+    if (!filters.includeArchived) query = query.is("archived_at", null);
     const { data, error, count } = await query
       .order("scheduled_for", { ascending: false, nullsFirst: false })
       .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
@@ -1388,6 +1400,7 @@ export const repository = {
         .from("admin_communications")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", organizationId)
+        .is("archived_at", null)
         .eq("status", status);
       if (error && error.code !== "PGRST205") throw error;
       return count ?? 0;
@@ -1419,6 +1432,18 @@ export const repository = {
       .maybeSingle();
     if (error) throw error;
     return data ? { id: String(data.id), retryEligible: String(data.status) === "failed" } : null;
+  },
+  async setCommunicationArchived(input: { organizationId: string; communicationId: string; actorUserId: string; archived: boolean }) {
+    if (!hasSupabaseServiceConfig()) throw new Error("Communication archiving requires Supabase-backed storage.");
+    const { data, error } = await getSupabaseAdmin().rpc("set_communication_message_archived", {
+      p_organization_id: input.organizationId,
+      p_communication_id: input.communicationId,
+      p_actor_user_id: input.actorUserId,
+      p_archived: input.archived
+    }).maybeSingle();
+    if (error) throw error;
+    const row = parseCommunicationArchiveRpcRow(data);
+    return row ? { id: row.id, archivedAt: row.archived_at } : null;
   },
   async createPaymentLink(appointmentId: string, dependencies: { createCheckoutSession?: typeof createStripeCheckoutSession; now?: () => Date } = {}) {
     const createCheckoutSession = dependencies.createCheckoutSession ?? createStripeCheckoutSession;

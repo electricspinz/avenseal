@@ -17,7 +17,7 @@ function appointment(id: string, updatedAt: string, date = "2026-07-28", status:
 }
 
 function failedCommunication(id: string, timestamp: string): AdminCommunication {
-  return { id, source: "message", messageId: id, appointmentId: "appointment", customerId: "customer", customerName: "Customer", messageType: "booking_confirmation", recipientEmail: "customer@example.com", subject: "Confirmation", bodyHtml: null, status: "failed", scheduledFor: null, queuedAt: null, sentAt: null, attemptCount: 1, lastAttemptedAt: timestamp, lastError: "Provider error", providerMessageId: null, createdAt: timestamp, updatedAt: timestamp };
+  return { id, source: "message", messageId: id, appointmentId: "appointment", customerId: "customer", customerName: "Customer", messageType: "booking_confirmation", recipientEmail: "customer@example.com", subject: "Confirmation", bodyHtml: null, status: "failed", scheduledFor: null, queuedAt: null, sentAt: null, attemptCount: 1, lastAttemptedAt: timestamp, lastError: "Provider error", providerMessageId: null, createdAt: timestamp, updatedAt: timestamp, archivedAt: null };
 }
 
 function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>; communications: Promise<{ records: AdminCommunication[]; currentPage: number; totalPages: number; totalRecords: number }>; integrations: Promise<Integrations>; settings: Promise<OrganizationSettings> }> = {}): AttentionEngineRepository {
