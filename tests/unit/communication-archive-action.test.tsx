@@ -38,7 +38,7 @@ describe("CommunicationArchiveAction", () => {
     render(<CommunicationArchiveAction messageId="message-1" archived={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Communication archiving is unavailable. Please try again."));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Communication archiving is unavailable. Please try again."));
     expect(router.refresh).not.toHaveBeenCalled();
   });
 });
