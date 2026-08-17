@@ -9,8 +9,8 @@ export function CommunicationArchiveAction({ messageId, archived }: { messageId:
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
 
+  if (!messageId) return null;
   const communicationId = messageId;
-  if (!communicationId) return null;
 
   async function update() {
     setPending(true);
