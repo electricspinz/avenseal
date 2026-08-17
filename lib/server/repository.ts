@@ -52,6 +52,7 @@ import type {
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 type SupabaseRow = Record<string, unknown>;
+type CommunicationArchiveRpcRow = Readonly<{ id: string; archived_at: string | null }>;
 
 type SupabaseAppointmentRow = {
   id: string;
@@ -160,6 +161,15 @@ function nullableBoolean(value: unknown) {
 
 function stringOrNull(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function parseCommunicationArchiveRpcRow(value: unknown): CommunicationArchiveRpcRow | null {
+  if (!isSupabaseRow(value) || typeof value.id !== "string" || (value.archived_at !== null && typeof value.archived_at !== "string")) return null;
+  return { id: value.id, archived_at: value.archived_at };
+}
+
+function isSupabaseRow(value: unknown): value is SupabaseRow {
+  return typeof value === "object" && value !== null;
 }
 
 function mapBusiness(org: SupabaseRow, settings: SupabaseRow): BusinessSettings {
@@ -1161,8 +1171,8 @@ export const repository = {
       p_archived: input.archived
     }).maybeSingle();
     if (error) throw error;
-    if (!data) return null;
-    return { id: String(data.id), archivedAt: stringOrNull(data.archived_at) };
+    const row = parseCommunicationArchiveRpcRow(data);
+    return row ? { id: row.id, archivedAt: row.archived_at } : null;
   },
   async createPaymentLink(appointmentId: string, dependencies: { createCheckoutSession?: typeof createStripeCheckoutSession; now?: () => Date } = {}) {
     const createCheckoutSession = dependencies.createCheckoutSession ?? createStripeCheckoutSession;

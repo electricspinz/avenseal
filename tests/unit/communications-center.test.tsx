@@ -22,7 +22,7 @@ describe("Communications Center", () => {
     const calls: Array<boolean | undefined> = [];
     const source: CommunicationsCenterRepository = {
       listAdminCommunications: async (filters) => {
-        calls.push(filters.includeArchived);
+        calls.push(filters?.includeArchived);
         return { records: [record], currentPage: 1, totalPages: 1, totalRecords: 1 };
       },
       getAdminCommunication: async () => record
@@ -81,7 +81,7 @@ describe("Communications Center", () => {
     const archived = { ...record, archivedAt: "2026-08-17T12:00:00.000Z" };
     const source: CommunicationsCenterRepository = {
       listAdminCommunications: async (filters) => {
-        expect(filters.includeArchived).toBe(true);
+        expect(filters?.includeArchived).toBe(true);
         return { records: [archived], currentPage: 1, totalPages: 1, totalRecords: 1 };
       },
       getAdminCommunication: async () => archived
