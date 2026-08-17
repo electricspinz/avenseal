@@ -5,7 +5,7 @@ import { CommunicationList, CommunicationsErrorState, CommunicationsFilters, Com
 import { normalizeQuery, queryCommunicationsCenter, type CommunicationsCenterRepository } from "@/lib/server/communications-center";
 import type { AdminCommunication } from "@/lib/types";
 
-const record: AdminCommunication = { id: "m:communication-1", source: "message", messageId: "communication-1", appointmentId: "appointment-1", customerId: "customer-1", customerName: "Jordan Lee", messageType: "appointment_reminder_24h", recipientEmail: "jordan@example.com", subject: "Reminder", bodyHtml: null, status: "sent", scheduledFor: null, queuedAt: "2026-07-29T10:00:00.000Z", sentAt: "2026-07-29T10:05:00.000Z", attemptCount: 1, lastAttemptedAt: "2026-07-29T10:05:00.000Z", lastError: null, providerMessageId: "provider-secret", createdAt: "2026-07-29T10:00:00.000Z", updatedAt: "2026-07-29T10:05:00.000Z" };
+const record: AdminCommunication = { id: "m:communication-1", source: "message", messageId: "communication-1", appointmentId: "appointment-1", customerId: "customer-1", customerName: "Jordan Lee", messageType: "appointment_reminder_24h", recipientEmail: "jordan@example.com", subject: "Reminder", bodyHtml: null, status: "sent", scheduledFor: null, queuedAt: "2026-07-29T10:00:00.000Z", sentAt: "2026-07-29T10:05:00.000Z", attemptCount: 1, lastAttemptedAt: "2026-07-29T10:05:00.000Z", lastError: null, providerMessageId: "provider-secret", createdAt: "2026-07-29T10:00:00.000Z", updatedAt: "2026-07-29T10:05:00.000Z", archivedAt: null };
 
 const dataSource: CommunicationsCenterRepository = {
   async listAdminCommunications() { return { records: [record], currentPage: 1, totalPages: 1, totalRecords: 1 }; },
@@ -18,13 +18,29 @@ describe("Communications Center", () => {
     await expect(queryCommunicationsCenter({ search: "no match" }, dataSource)).resolves.toMatchObject({ records: [] });
   });
 
+  it("requests only unarchived records unless Show archived is enabled", async () => {
+    const calls: Array<boolean | undefined> = [];
+    const source: CommunicationsCenterRepository = {
+      listAdminCommunications: async (filters) => {
+        calls.push(filters.includeArchived);
+        return { records: [record], currentPage: 1, totalPages: 1, totalRecords: 1 };
+      },
+      getAdminCommunication: async () => record
+    };
+    await queryCommunicationsCenter({}, source);
+    await queryCommunicationsCenter({ archived: "on" }, source);
+    expect(calls).toEqual([false, true]);
+  });
+
   it("narrows untrusted filter values", () => {
     expect(normalizeQuery({ status: "failed", channel: "email", from: "2026-07-01", to: "invalid" })).toMatchObject({ status: "failed", channel: "email", from: "2026-07-01", to: undefined });
+    expect(normalizeQuery({ archived: "on" }).showArchived).toBe(true);
   });
 
   it("renders accessible filters, linked records, and the empty state", () => {
-    render(<><CommunicationsFilters query={normalizeQuery({})} /><CommunicationList records={[{ id: record.id, customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: record.messageType, channel: "email", status: record.status, provider: null, occurredAt: record.sentAt!, safeSummary: "Communication delivered.", source: record.source, messageId: record.messageId }]} timezone="America/New_York" /></>);
+    render(<><CommunicationsFilters query={normalizeQuery({})} /><CommunicationList records={[{ id: record.id, customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: record.messageType, channel: "email", status: record.status, provider: null, occurredAt: record.sentAt!, safeSummary: "Communication delivered.", source: record.source, messageId: record.messageId, archivedAt: null }]} timezone="America/New_York" /></>);
     expect(screen.getByRole("form", { name: "Filter communications" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Show archived" })).toBeTruthy();
     expect(screen.getAllByText("24-hour reminder").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Delivered").length).toBeGreaterThan(0);
     render(<CommunicationList records={[]} timezone="America/New_York" />);
@@ -32,14 +48,14 @@ describe("Communications Center", () => {
   });
 
   it("labels external-session availability without exposing URLs", () => {
-    render(<CommunicationList records={[{ id: "external", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "queued", provider: null, occurredAt: record.createdAt, safeSummary: "Communication is queued.", source: "message", messageId: record.messageId }]} timezone="America/New_York" />);
+    render(<CommunicationList records={[{ id: "external", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "queued", provider: null, occurredAt: record.createdAt, safeSummary: "Communication is queued.", source: "message", messageId: record.messageId, archivedAt: null }]} timezone="America/New_York" />);
     expect(screen.getAllByText("External Session Available").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("appointments/access/");
     expect(document.body.textContent).not.toContain("bluenotary");
   });
 
   it("renders a terminally suppressed handoff as cancelled without sensitive delivery context", () => {
-    render(<CommunicationList records={[{ id: "suppressed", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "cancelled", provider: null, occurredAt: record.createdAt, safeSummary: "Communication was cancelled.", source: "message", messageId: record.messageId }]} timezone="America/New_York" />);
+    render(<CommunicationList records={[{ id: "suppressed", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: "external_session_available", channel: "email", status: "cancelled", provider: null, occurredAt: record.createdAt, safeSummary: "Communication was cancelled.", source: "message", messageId: record.messageId, archivedAt: null }]} timezone="America/New_York" />);
     expect(screen.getAllByText("Cancelled").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Communication was cancelled.").length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain("appointments/access/");
@@ -48,7 +64,7 @@ describe("Communications Center", () => {
   });
 
   it("exposes a retry form only for failed records with a backing communication message", () => {
-    const failed = { id: "m:communication-1", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: record.messageType, channel: "email" as const, status: "failed" as const, provider: null, occurredAt: record.createdAt, safeSummary: "Communication delivery failed.", source: "message" as const, messageId: "communication-1" };
+    const failed = { id: "m:communication-1", customerId: record.customerId, customerName: record.customerName, appointmentId: record.appointmentId, purpose: record.messageType, channel: "email" as const, status: "failed" as const, provider: null, occurredAt: record.createdAt, safeSummary: "Communication delivery failed.", source: "message" as const, messageId: "communication-1", archivedAt: null };
     const { rerender } = render(<CommunicationList records={[failed]} timezone="America/New_York" />);
     const retries = screen.getAllByRole("button", { name: "Retry delivery" });
     expect(retries).toHaveLength(2);
@@ -59,6 +75,19 @@ describe("Communications Center", () => {
 
     rerender(<CommunicationList records={[{ ...failed, status: "sent" }]} timezone="America/New_York" />);
     expect(screen.queryAllByRole("button", { name: "Retry delivery" })).toHaveLength(0);
+  });
+
+  it("marks archived records only when the operator includes them", async () => {
+    const archived = { ...record, archivedAt: "2026-08-17T12:00:00.000Z" };
+    const source: CommunicationsCenterRepository = {
+      listAdminCommunications: async (filters) => {
+        expect(filters.includeArchived).toBe(true);
+        return { records: [archived], currentPage: 1, totalPages: 1, totalRecords: 1 };
+      },
+      getAdminCommunication: async () => archived
+    };
+    const result = await queryCommunicationsCenter({ archived: "on" }, source);
+    expect(result.records[0]).toMatchObject({ archivedAt: archived.archivedAt });
   });
 
   it("renders the route-level loading and safe error states", () => {
