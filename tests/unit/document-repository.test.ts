@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createAppointmentDocumentRepository, documentDownloadedAudit, documentReviewedAudit, documentUploadedAudit } from "@/lib/server/document-repository";
+import { createAppointmentDocumentRepository, documentDownloadedAudit, documentPreviewedAudit, documentProviderHandoffDownloadedAudit, documentReviewedAudit, documentUploadedAudit } from "@/lib/server/document-repository";
 
 function repositoryClient(appointmentOrganizationId = "org-1", options: { status?: "uploaded" | "approved" | "rejected"; scanStatus?: "pending" | "clean" | "infected" | "suspicious" | "failed"; storageStatus?: "quarantined" | "active" | "removed"; storageConflictTo?: "quarantined" | "active" | "removed"; scanAttemptCount?: number; deletedAt?: string | null; documentExists?: boolean; reviewerRole?: "owner" | "admin" | "staff" | null } = {}) {
   const inserts: Array<{ table: string; value: Record<string, unknown> }> = [];
@@ -90,6 +90,8 @@ describe("appointment document repository", () => {
     const documents = await createAppointmentDocumentRepository(state.client).listAppointmentDocuments("org-1", "appointment-1");
     expect(documents).toHaveLength(1);
     await expect(createAppointmentDocumentRepository(state.client).getDocumentForDownload("org-1", "appointment-1", "document-1")).resolves.toMatchObject({ id: "document-1", appointmentId: "appointment-1", deletedAt: null, scanStatus: "clean", storageStatus: "active", scanProvider: null, scanFailureCategory: null });
+    await expect(createAppointmentDocumentRepository(state.client).getDocumentForPreview("org-1", "appointment-1", "document-1")).resolves.toMatchObject({ id: "document-1", appointmentId: "appointment-1", deletedAt: null, scanStatus: "clean", storageStatus: "active" });
+    await expect(createAppointmentDocumentRepository(state.client).getDocumentForProviderHandoff("org-1", "appointment-1", "document-1")).resolves.toMatchObject({ id: "document-1", appointmentId: "appointment-1", deletedAt: null, scanStatus: "clean", storageStatus: "active" });
     expect(state.selects).toEqual(expect.arrayContaining([expect.objectContaining({ table: "appointment_document_files", filters: expect.arrayContaining([["organization_id", "org-1"], ["appointment_request_id", "appointment-1"], ["id", "document-1"], ["scan_status", "clean"], ["storage_status", "active"]]) })]));
   });
 
@@ -106,6 +108,8 @@ describe("appointment document repository", () => {
       { scanStatus: "clean" as const, storageStatus: "unknown" as never }
     ]) {
       await expect(createAppointmentDocumentRepository(repositoryClient("org-1", options).client).getDocumentForDownload("org-1", "appointment-1", "document-1")).resolves.toBeNull();
+      await expect(createAppointmentDocumentRepository(repositoryClient("org-1", options).client).getDocumentForPreview("org-1", "appointment-1", "document-1")).resolves.toBeNull();
+      await expect(createAppointmentDocumentRepository(repositoryClient("org-1", options).client).getDocumentForProviderHandoff("org-1", "appointment-1", "document-1")).resolves.toBeNull();
     }
     for (const [state, organizationId, appointmentId, documentId] of [
       [repositoryClient("org-1", { scanStatus: "clean", storageStatus: "active" }), "org-2", "appointment-1", "document-1"],
@@ -113,6 +117,8 @@ describe("appointment document repository", () => {
       [repositoryClient("org-1", { scanStatus: "clean", storageStatus: "active", documentExists: false }), "org-1", "appointment-1", "document-1"]
     ] as const) {
       await expect(createAppointmentDocumentRepository(state.client).getDocumentForDownload(organizationId, appointmentId, documentId)).resolves.toBeNull();
+      await expect(createAppointmentDocumentRepository(state.client).getDocumentForPreview(organizationId, appointmentId, documentId)).resolves.toBeNull();
+      await expect(createAppointmentDocumentRepository(state.client).getDocumentForProviderHandoff(organizationId, appointmentId, documentId)).resolves.toBeNull();
     }
   });
 
@@ -282,6 +288,18 @@ describe("appointment document repository", () => {
     expect(audit).toEqual({ organization_id: "org-1", action: "document.downloaded", entity_type: "appointment_request", entity_id: "appointment-1", metadata: { documentId: "document-1", appointmentId: "appointment-1", organizationId: "org-1", actorType: "admin", occurredAt: "2026-08-01T10:00:00.000Z" } });
     expect(JSON.stringify(audit)).not.toContain("storage_key");
     expect(JSON.stringify(audit)).not.toContain("document.pdf");
+  });
+
+  it("creates a safe preview audit without object keys, URLs, filenames, or document contents", () => {
+    const audit = documentPreviewedAudit({ id: "document-1", organizationId: "org-1", appointmentId: "appointment-1" }, "admin", "2026-08-01T10:00:00.000Z");
+    expect(audit).toEqual({ organization_id: "org-1", action: "document.previewed", entity_type: "appointment_request", entity_id: "appointment-1", metadata: { documentId: "document-1", actorType: "admin", occurredAt: "2026-08-01T10:00:00.000Z" } });
+    expect(JSON.stringify(audit)).not.toMatch(/storage|url|filename|content/i);
+  });
+
+  it("creates a safe provider-handoff audit without object keys, URLs, filenames, or document contents", () => {
+    const audit = documentProviderHandoffDownloadedAudit({ id: "document-1", organizationId: "org-1", appointmentId: "appointment-1" }, "owner", "2026-08-01T10:00:00.000Z");
+    expect(audit).toEqual({ organization_id: "org-1", action: "document.provider_handoff_downloaded", entity_type: "appointment_request", entity_id: "appointment-1", metadata: { documentId: "document-1", actorType: "owner", occurredAt: "2026-08-01T10:00:00.000Z" } });
+    expect(JSON.stringify(audit)).not.toMatch(/storage|url|filename|content|quarantine/i);
   });
 
   it("approves an uploaded document, persists review metadata, and records safe audit data", async () => {

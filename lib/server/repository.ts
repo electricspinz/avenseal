@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/appointment-availability";
 import { getGoogleConnectionStatus } from "@/lib/server/google-oauth";
 import {
+  appointmentDateTimeRange,
   retryPendingCalendarSyncs,
   synchronizeAppointmentCalendar
 } from "@/lib/server/google-calendar-sync";
@@ -53,6 +54,130 @@ import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 
 type SupabaseRow = Record<string, unknown>;
 type CommunicationArchiveRpcRow = Readonly<{ id: string; archived_at: string | null }>;
+
+const communicationMessageStatuses = [
+  "queued",
+  "processing",
+  "sent",
+  "delivered",
+  "failed",
+  "skipped",
+  "cancelled",
+] as const satisfies readonly CommunicationMessage["status"][];
+
+function isCommunicationMessageStatus(value: unknown): value is CommunicationMessage["status"] {
+  return typeof value === "string" && communicationMessageStatuses.some((status) => status === value);
+}
+
+function communicationMessageStatus(value: unknown): CommunicationMessage["status"] {
+  if (!isCommunicationMessageStatus(value)) {
+    throw new Error("Invalid communication message status.");
+  }
+  return value;
+}
+
+export type AdminAppointmentRescheduleDiagnosticCategory =
+  | "availability_preflight_failed"
+  | "rpc_invalid_schedule_input"
+  | "rpc_inactive_or_unconfigured_organization"
+  | "rpc_availability_schedule_missing"
+  | "rpc_invalid_dst_local_time"
+  | "rpc_minimum_notice_violation"
+  | "rpc_same_day_booking_disallowed"
+  | "rpc_beyond_booking_horizon"
+  | "rpc_blocked_exception"
+  | "rpc_outside_availability_interval"
+  | "rpc_daily_limit_reached"
+  | "rpc_appointment_overlap"
+  | "rpc_reservation_overlap"
+  | "rpc_tenant_or_appointment_mismatch"
+  | "rpc_reservation_transition_failed"
+  | "rpc_audit_insert_failed"
+  | "rpc_function_or_signature_missing"
+  | "rpc_undefined_column"
+  | "rpc_undefined_table"
+  | "rpc_permission_denied"
+  | "rpc_ambiguous_column"
+  | "rpc_not_null_violation"
+  | "rpc_foreign_key_violation"
+  | "rpc_unique_violation"
+  | "rpc_check_violation"
+  | "rpc_invalid_input"
+  | "rpc_datetime_failure"
+  | "rpc_cardinality_violation"
+  | "rpc_uncategorized_raise"
+  | "unknown_rpc_validation_failure"
+  | "rpc_not_found"
+  | "communication_failed"
+  | "unexpected_database_error";
+
+const rescheduleRpcDiagnosticCategories = {
+  AVENSEAL_RESCHEDULE_INVALID_SCHEDULE_INPUT: "rpc_invalid_schedule_input",
+  AVENSEAL_RESCHEDULE_INACTIVE_OR_UNCONFIGURED_ORGANIZATION: "rpc_inactive_or_unconfigured_organization",
+  AVENSEAL_RESCHEDULE_AVAILABILITY_SCHEDULE_MISSING: "rpc_availability_schedule_missing",
+  AVENSEAL_RESCHEDULE_INVALID_DST_LOCAL_TIME: "rpc_invalid_dst_local_time",
+  AVENSEAL_RESCHEDULE_MINIMUM_NOTICE: "rpc_minimum_notice_violation",
+  AVENSEAL_RESCHEDULE_SAME_DAY_DISALLOWED: "rpc_same_day_booking_disallowed",
+  AVENSEAL_RESCHEDULE_BEYOND_BOOKING_HORIZON: "rpc_beyond_booking_horizon",
+  AVENSEAL_RESCHEDULE_BLOCKED_EXCEPTION: "rpc_blocked_exception",
+  AVENSEAL_RESCHEDULE_OUTSIDE_AVAILABILITY_INTERVAL: "rpc_outside_availability_interval",
+  AVENSEAL_RESCHEDULE_DAILY_LIMIT_REACHED: "rpc_daily_limit_reached",
+  AVENSEAL_RESCHEDULE_APPOINTMENT_OVERLAP: "rpc_appointment_overlap",
+  AVENSEAL_RESCHEDULE_RESERVATION_OVERLAP: "rpc_reservation_overlap",
+  AVENSEAL_RESCHEDULE_TENANT_OR_APPOINTMENT_MISMATCH: "rpc_tenant_or_appointment_mismatch",
+  AVENSEAL_RESCHEDULE_RESERVATION_TRANSITION_FAILED: "rpc_reservation_transition_failed",
+  AVENSEAL_RESCHEDULE_AUDIT_INSERT_FAILED: "rpc_audit_insert_failed"
+} as const satisfies Record<string, AdminAppointmentRescheduleDiagnosticCategory>;
+
+const rescheduleRpcDiagnosticFields = ["message", "details", "hint", "code"] as const;
+
+// Temporary, non-sensitive production diagnostics. This deliberately classifies
+// only exact PostgreSQL/PostgREST codes after approved SQL tokens are checked.
+const rescheduleRpcDiagnosticCodeCategories = {
+  "42883": "rpc_function_or_signature_missing",
+  PGRST202: "rpc_function_or_signature_missing",
+  "42703": "rpc_undefined_column",
+  "42P01": "rpc_undefined_table",
+  "42501": "rpc_permission_denied",
+  "42702": "rpc_ambiguous_column",
+  "23502": "rpc_not_null_violation",
+  "23503": "rpc_foreign_key_violation",
+  "23505": "rpc_unique_violation",
+  "23514": "rpc_check_violation",
+  "22P02": "rpc_invalid_input",
+  "22007": "rpc_datetime_failure",
+  "22008": "rpc_datetime_failure",
+  "21000": "rpc_cardinality_violation",
+  P0001: "rpc_uncategorized_raise"
+} as const satisfies Record<string, AdminAppointmentRescheduleDiagnosticCategory>;
+
+export function mapAdminAppointmentRescheduleRpcDiagnostic(error: unknown): AdminAppointmentRescheduleDiagnosticCategory {
+  if (typeof error !== "object" || error === null) return "unknown_rpc_validation_failure";
+  const fields = error as Record<string, unknown>;
+  for (const field of rescheduleRpcDiagnosticFields) {
+    const value = typeof fields[field] === "string" ? fields[field] : null;
+    if (!value) continue;
+    for (const [token, category] of Object.entries(rescheduleRpcDiagnosticCategories)) {
+      const exactToken = new RegExp(`(?:^|[^A-Za-z0-9_])${token}(?:$|[^A-Za-z0-9_])`);
+      if (exactToken.test(value)) return category;
+    }
+  }
+  const code = typeof fields.code === "string" ? fields.code : null;
+  if (code && Object.prototype.hasOwnProperty.call(rescheduleRpcDiagnosticCodeCategories, code)) {
+    return rescheduleRpcDiagnosticCodeCategories[code as keyof typeof rescheduleRpcDiagnosticCodeCategories];
+  }
+  return "unknown_rpc_validation_failure";
+}
+
+export class AdminAppointmentRescheduleDiagnosticError extends Error {
+  constructor(
+    readonly category: AdminAppointmentRescheduleDiagnosticCategory,
+    message: string
+  ) {
+    super(message);
+    this.name = "AdminAppointmentRescheduleDiagnosticError";
+  }
+}
 
 type SupabaseAppointmentRow = {
   id: string;
@@ -185,8 +310,8 @@ function mapBusiness(org: SupabaseRow, settings: SupabaseRow): BusinessSettings 
     defaultDeliveryMethod: String(settings.default_delivery_method ?? org.default_delivery_method ?? "remote_online_notarization") as BusinessSettings["defaultDeliveryMethod"],
     pricingHeadline: String(settings.pricing_headline ?? "Clear pricing shown before your appointment is confirmed."),
     pricingNote: String(settings.pricing_note ?? "Pricing content is awaiting business approval."),
-    privacyPolicyVersion: String(settings.privacy_policy_version ?? "legal-review-placeholder-2026-07"),
-    termsVersion: String(settings.terms_version ?? "legal-review-placeholder-2026-07")
+    privacyPolicyVersion: String(settings.privacy_policy_version ?? "privacy-policy-2026-08-09"),
+    termsVersion: String(settings.terms_version ?? "terms-of-service-2026-08-09")
   };
 }
 
@@ -681,6 +806,46 @@ export const repository = {
       status: row.status as ExternalSessionStatus
     }));
   },
+  async listExternalSessionNextActionSources(appointmentIds: readonly string[]) {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("external_sessions")
+      .select("organization_id,appointment_request_id,status,launch_url")
+      .eq("organization_id", organizationId)
+      .in("appointment_request_id", [...appointmentIds]);
+    if (error?.code === "PGRST205") return [];
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      status: String(row.status),
+      launchUrl: stringOrNull(row.launch_url),
+    }));
+  },
+  async listExternalSessionAvailableCommunicationSources(appointmentIds: readonly string[]): Promise<Array<{
+    organizationId: string;
+    appointmentId: string;
+    messageType: CommunicationMessage["messageType"];
+    status: CommunicationMessage["status"];
+  }>> {
+    if (!hasSupabaseServiceConfig() || appointmentIds.length === 0) return [];
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("communication_messages")
+      .select("organization_id,appointment_request_id,message_type,status,created_at")
+      .eq("organization_id", organizationId)
+      .eq("message_type", "external_session_available")
+      .in("appointment_request_id", [...appointmentIds])
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      organizationId: String(row.organization_id),
+      appointmentId: String(row.appointment_request_id),
+      messageType: String(row.message_type),
+      status: communicationMessageStatus(row.status),
+    }));
+  },
   async listReadinessTransitionAlertSources() {
     if (!hasSupabaseServiceConfig()) return [];
     const organizationId = await resolvePublicOrganizationId();
@@ -987,6 +1152,112 @@ export const repository = {
       await synchronizeCalendarAfterSave(organizationId, id);
     }
     return mapped;
+  },
+  async rescheduleAppointment(input: { appointmentId: string; organizationId: string; actorUserId: string; preferredDate: string; preferredTime: string }) {
+    const previous = await repository.getAppointment(input.appointmentId);
+    if (!previous || previous.organizationId !== input.organizationId) throw new Error("Appointment not found.");
+    if (!previous.serviceId) throw new Error("This legacy appointment cannot be safely rescheduled.");
+
+    const requestedTime = normalizeTime(input.preferredTime);
+    let availability: Awaited<ReturnType<typeof getAvailableAppointmentSlots>>;
+    try {
+      availability = await getAvailableAppointmentSlots({
+        organizationId: input.organizationId,
+        serviceId: previous.serviceId,
+        date: input.preferredDate,
+        excludeAppointmentId: previous.id
+      });
+    } catch {
+      throw new AdminAppointmentRescheduleDiagnosticError("availability_preflight_failed", "Selected appointment time is outside current availability.");
+    }
+    if (!availability.slots.some((slot) => localTimeForAppointmentSlot(slot.startAt, availability.timezone) === requestedTime)) {
+      throw new AdminAppointmentRescheduleDiagnosticError("availability_preflight_failed", "Selected appointment time is outside current availability.");
+    }
+
+    if (!hasSupabaseServiceConfig()) {
+      const appointment = await devStore.updateAppointment(previous.id, { preferredDate: input.preferredDate, preferredTime: requestedTime });
+      return { appointment, calendarSyncStatus: "skipped" as const };
+    }
+
+    let data: unknown;
+    try {
+      const result = await getSupabaseAdmin().rpc("reschedule_admin_appointment", {
+        p_organization_id: input.organizationId,
+        p_appointment_id: previous.id,
+        p_preferred_date: input.preferredDate,
+        p_preferred_time: requestedTime,
+        p_actor_user_id: input.actorUserId
+      });
+      if (result.error) throw result.error;
+      data = result.data;
+    } catch (error) {
+      throw new AdminAppointmentRescheduleDiagnosticError(mapAdminAppointmentRescheduleRpcDiagnostic(error), "The appointment could not be rescheduled.");
+    }
+    const appointment = await repository.getAppointment(previous.id);
+    if (!appointment) throw new AdminAppointmentRescheduleDiagnosticError("rpc_not_found", "The appointment could not be rescheduled.");
+
+    let settings: OrganizationSettings;
+    try {
+      settings = await loadOrganizationSettings();
+      const range = appointmentDateTimeRange({
+        preferredDate: appointment.preferredDate,
+        preferredTime: appointment.preferredTime,
+        timezone: settings.business.timezone,
+        serviceDurationMinutesSnapshot: appointment.serviceDurationMinutesSnapshot,
+        defaultDurationMinutes: settings.rules.defaultDurationMinutes
+      });
+      await cancelAppointmentReminders(getSupabaseAdmin(), appointment.id);
+      await scheduleAppointmentReminders(getSupabaseAdmin(), {
+        organizationId: appointment.organizationId,
+        appointmentId: appointment.id,
+        startsAt: new Date(range.startsAt),
+        settings: settings.communications
+      });
+    } catch {
+      throw new AdminAppointmentRescheduleDiagnosticError("unexpected_database_error", "The appointment could not be rescheduled.");
+    }
+
+    const rescheduleCount = Number((data as Array<{ reschedule_count?: unknown }> | null)?.[0]?.reschedule_count ?? 0);
+    try {
+      await enqueueAndProcessEmail(getSupabaseAdmin(), {
+        organizationId: appointment.organizationId,
+        appointmentId: appointment.id,
+        customerId: appointment.customerId,
+        type: "appointment_rescheduled",
+        recipient: appointment.customer.email,
+        subject: renderEmailSubject("appointment_rescheduled", settings.business.businessName),
+        html: renderEmailTemplate({
+          greetingName: appointment.customer.fullName,
+          body: `Your appointment has been rescheduled to ${appointment.preferredDate} at ${appointment.preferredTime} (${settings.business.timezone}).`,
+          footer: `Questions? Contact ${settings.business.supportEmail}${settings.business.supportPhone ? ` or ${settings.business.supportPhone}` : ""}.`
+        }),
+        idempotencyDiscriminator: `reschedule:${rescheduleCount}`
+      });
+    } catch {
+      throw new AdminAppointmentRescheduleDiagnosticError("communication_failed", "The appointment could not be rescheduled.");
+    }
+
+    const calendar = await synchronizeCalendarAfterSave(appointment.organizationId, appointment.id);
+    return { appointment, calendarSyncStatus: calendar?.status ?? "skipped" as const };
+  },
+  async listAppointmentRescheduleHistory(organizationId: string, appointmentId: string) {
+    if (!hasSupabaseServiceConfig()) return [] as Array<{ id: string; actorUserId: string | null; createdAt: string; previousDate: string; previousTime: string; preferredDate: string; preferredTime: string; timezone: string }>;
+    const { data, error } = await getSupabaseAdmin().from("audit_logs")
+      .select("id,actor_user_id,created_at,metadata")
+      .eq("organization_id", organizationId)
+      .eq("entity_type", "appointment_request")
+      .eq("entity_id", appointmentId)
+      .eq("action", "appointment.rescheduled")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => {
+      const metadata = row.metadata as Record<string, unknown>;
+      return {
+        id: String(row.id), actorUserId: typeof row.actor_user_id === "string" ? row.actor_user_id : null, createdAt: String(row.created_at),
+        previousDate: String(metadata.previousDate ?? ""), previousTime: String(metadata.previousTime ?? ""),
+        preferredDate: String(metadata.preferredDate ?? ""), preferredTime: String(metadata.preferredTime ?? ""), timezone: String(metadata.timezone ?? "")
+      };
+    });
   },
   async listCustomers() {
     if (!hasSupabaseServiceConfig()) return devStore.listCustomers();

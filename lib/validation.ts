@@ -44,6 +44,10 @@ const nullableNumber = (min: number, max: number) =>
 
 const text = (max = 200) => z.string().transform((value) => sanitizeText(value, max));
 
+const optionalWebsite = z
+  .union([z.string().trim().url().max(240), z.literal(""), z.null(), z.undefined()])
+  .transform((value) => value || null);
+
 export const bookingSchema = z
   .object({
     serviceId: z.string().uuid("Select a valid service."),
@@ -66,8 +70,8 @@ export const bookingSchema = z
     consentAccepted: z.literal(true, {
       errorMap: () => ({ message: "Consent is required before submitting." })
     }),
-    privacyPolicyVersion: z.string().default("legal-review-placeholder-2026-07"),
-    termsVersion: z.string().default("legal-review-placeholder-2026-07")
+    privacyPolicyVersion: z.string().default("privacy-policy-2026-08-09"),
+    termsVersion: z.string().default("terms-of-service-2026-08-09")
   })
   .refine((data) => data.notarizationsNotSure || !!data.estimatedNotarizations, {
     path: ["estimatedNotarizations"],
@@ -76,12 +80,42 @@ export const bookingSchema = z
 
 export type BookingInput = z.infer<typeof bookingSchema>;
 
+export const partnerInterestSchema = z.object({
+  firstName: text(80).pipe(z.string().min(1, "Enter your first name.")),
+  lastName: text(80).pipe(z.string().min(1, "Enter your last name.")),
+  organization: text(160).pipe(z.string().min(2, "Enter your organization.")),
+  workEmail: z.string().trim().email("Enter a valid work email.").max(180),
+  phone: optionalText(30),
+  industry: text(120).pipe(z.string().min(2, "Select your organization type.")),
+  website: optionalWebsite,
+  message: optionalText(1000),
+  noCommissionAcknowledged: z.literal(true, {
+    errorMap: () => ({ message: "Confirm that this is not a referral commission program." })
+  })
+});
+
+export type PartnerInterestInput = z.infer<typeof partnerInterestSchema>;
+
 export const adminUpdateSchema = z.object({
   status: z.enum(appointmentStatuses).optional(),
   serviceId: z.string().uuid().optional(),
-  preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  preferredTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   note: text(1000).optional()
+});
+
+const isCalendarDate = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+};
+
+const isClockTime = (value: string) => {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+};
+
+export const adminRescheduleSchema = z.object({
+  preferredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate, "Enter a valid date."),
+  preferredTime: z.string().regex(/^\d{2}:\d{2}$/).refine(isClockTime, "Enter a valid time.")
 });
 
 export const paymentLinkSchema = z.object({

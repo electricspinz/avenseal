@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Brand } from "@/components/brand";
 import { Button } from "@/components/button";
 import { icons } from "@/components/icons";
+import { trackAppointmentSelected, trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted } from "@/lib/analytics";
+import { rememberPartnerCode } from "@/lib/partner-attribution";
 
 type Draft = {
   fullName: string;
@@ -55,6 +58,8 @@ const steps = [
   "Review"
 ];
 
+const analyticsStepNames = ["customer_details", "document_details", "participants_and_location", "identification_readiness", "appointment_preferences", "notes_and_consent", "review"];
+
 const categories = [
   ["affidavit", "Affidavit"],
   ["power_of_attorney", "Power of Attorney"],
@@ -85,6 +90,8 @@ export function BookingFlow({
   useEffect(() => {
     const saved = window.localStorage.getItem("avenseal-booking-draft");
     if (saved) setDraft({ ...defaultDraft, ...JSON.parse(saved) });
+    rememberPartnerCode(new URLSearchParams(window.location.search).get("partner"));
+    trackBookingStarted();
   }, []);
 
   useEffect(() => {
@@ -175,6 +182,7 @@ export function BookingFlow({
 
   function next() {
     if (!validateCurrentStep()) return;
+    trackBookingStepCompleted(analyticsStepNames[step], step + 1);
     setStep((current) => Math.min(current + 1, steps.length - 1));
   }
 
@@ -188,8 +196,8 @@ export function BookingFlow({
         ...draft,
         serviceId,
         administrativeNotes: draft.administrativeNotes || null,
-        privacyPolicyVersion: "legal-review-placeholder-2026-07",
-        termsVersion: "legal-review-placeholder-2026-07"
+        privacyPolicyVersion: "privacy-policy-2026-08-09",
+        termsVersion: "terms-of-service-2026-08-09"
       })
     });
     const result = await response.json().catch(() => null);
@@ -199,6 +207,7 @@ export function BookingFlow({
       return;
     }
     window.localStorage.removeItem("avenseal-booking-draft");
+    trackBookingSubmitted();
     window.location.assign("/booking/confirmation");
   }
 
@@ -258,7 +267,7 @@ export function BookingFlow({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Requested appointment date"><input type="date" value={draft.preferredDate} onChange={(event) => update("preferredDate", event.target.value)} className="input" /></Field>
               <Field label="Requested appointment time">
-                <select value={draft.preferredTime} onChange={(event) => update("preferredTime", event.target.value)} className="input" disabled={availabilityLoading || slots.length === 0}>
+                <select value={draft.preferredTime} onChange={(event) => { update("preferredTime", event.target.value); trackAppointmentSelected(draft.urgency); }} className="input" disabled={availabilityLoading || slots.length === 0}>
                   {slots.map((slot) => <option key={slot} value={slot}>{formatSlot(slot)}</option>)}
                 </select>
               </Field>
@@ -276,12 +285,15 @@ export function BookingFlow({
         );
       case 5:
         return (
-          <Question title="Add notes and consent." description="Only share administrative notes. Do not paste document contents or sensitive ID details.">
-            <Field label="Administrative notes"><textarea value={draft.administrativeNotes} onChange={(event) => update("administrativeNotes", event.target.value)} className="input min-h-28" /></Field>
-            <label className="flex items-start gap-3 rounded-lg border border-silver p-4 text-sm text-slateDeep">
-              <input type="checkbox" checked={draft.consentAccepted} onChange={(event) => update("consentAccepted", event.target.checked)} className="mt-1" />
-              I agree to the Privacy Policy and Terms.
-            </label>
+          <Question title="Add appointment details and consent." description="Only share appointment details. Do not paste document contents or sensitive ID details.">
+            <Field label="Appointment details"><textarea value={draft.administrativeNotes} onChange={(event) => update("administrativeNotes", event.target.value)} className="input min-h-28" /></Field>
+            <div className="rounded-lg border border-silver p-4 text-sm text-slateDeep">
+              <label className="flex items-start gap-3">
+                <input type="checkbox" checked={draft.consentAccepted} onChange={(event) => update("consentAccepted", event.target.checked)} className="mt-1" />
+                I agree to the Privacy Policy and Terms of Service.
+              </label>
+              <p className="mt-3 pl-7 leading-6">Read the <Link className="focus-ring rounded underline" href="/privacy">Privacy Policy</Link> and <Link className="focus-ring rounded underline" href="/terms">Terms of Service</Link>.</p>
+            </div>
           </Question>
         );
       default:
@@ -304,7 +316,7 @@ export function BookingFlow({
         <section className="mx-auto w-full max-w-4xl px-5 py-7 lg:px-10">
           <div className="flex items-center justify-between">
             <Brand />
-            <span className="text-xs font-semibold text-slateDeep">Draft saved locally</span>
+            <span className="text-xs font-semibold text-slateDeep">Your progress is saved on this device</span>
           </div>
           <div className="mt-8">
             <div className="h-2 rounded-full bg-silver">

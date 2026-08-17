@@ -1,0 +1,59 @@
+name: Process production document scans
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avenseal-production-document-scan-scheduler
+  cancel-in-progress: false
+
+jobs:
+  process:
+    name: Process quarantined production documents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      AVENSEAL_APP_URL: ${{ vars.AVENSEAL_APP_URL }}
+      DOCUMENT_SCAN_WORKER_SECRET: ${{ secrets.DOCUMENT_SCAN_WORKER_SECRET }}
+
+    steps:
+      - name: Validate production scheduler configuration
+        id: configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${AVENSEAL_APP_URL:-}" || -z "${DOCUMENT_SCAN_WORKER_SECRET:-}" ]]; then
+            echo "Production document-scan scheduler configuration is incomplete."
+            exit 1
+          fi
+          app_url="${AVENSEAL_APP_URL%/}"
+          if [[ ! "$app_url" =~ ^https:// ]]; then
+            echo "AVENSEAL_APP_URL must use HTTPS."
+            exit 1
+          fi
+          echo "app_url=$app_url" >> "$GITHUB_OUTPUT"
+
+      - name: Process one bounded production batch
+        shell: bash
+        env:
+          APP_URL: ${{ steps.configuration.outputs.app_url }}
+        run: |
+          set -euo pipefail
+          http_status="$(curl \
+            --silent \
+            --show-error \
+            --fail \
+            --request POST \
+            --header "Authorization: Bearer ${DOCUMENT_SCAN_WORKER_SECRET}" \
+            --connect-timeout 10 \
+            --max-time 60 \
+            --output /dev/null \
+            --write-out "%{http_code}" \
+            "$APP_URL/api/internal/document-scans/process")"
+          echo "Production document scan batch succeeded (HTTP $http_status)."

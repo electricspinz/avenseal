@@ -1,25 +1,31 @@
 # Avenseal Company Overview
 
-**Current internal reference.** This manual records approved business facts; it is not a substitute for legal, tax, licensing, or insurance advice.
+## Purpose
 
-| Item | Current fact |
+Define the public business identity used across this Knowledge Base.
+
+**Status:** Current working standard
+**Last Updated:** 2026-08-08
+
+## Current
+
+| Item | Working information |
 | --- | --- |
-| Legal entity | Avenseal LLC |
-| Brand and website | Avenseal · Avenseal.com |
-| Business address | 8025 Artisan Circle, Seminole, FL 33777 |
-| Support | appointments@avenseal.com |
-| Public phone | None at launch |
-| Service area | United States |
-| RON platform | BlueNotary |
+| Business | Avenseal |
+| Website | https://avenseal.com |
+| Phone | (727) 433-8565 |
+| Email | appointments@avenseal.com |
+| Business model | Service-area business; no public storefront represented here |
+| Office hours | Monday–Friday, 9:30 AM–5:30 PM ET |
+| Promise | Trust Every Signature. |
 
-## Operating role
+Avenseal is the customer-facing service for discovery, appointment requests and scheduling, payment, communications, and Client Workspace access. Identity verification and the remote notarization session occur through a trusted online notarization provider; a commissioned notary completes the notarization.
 
-Avenseal manages appointment scheduling, payment processing, temporary pre-session document intake, customer communications, and Client Workspace access. A commissioned Florida online notary performs the notarization through BlueNotary. Avenseal does not perform identity proofing, host the RON session, or make a notarial determination.
+## To Be Finalized
 
-Uploads are available after payment. Avenseal does not intentionally retain completed notarized documents. The target retention policy for pre-session uploads is seven days after completion or cancellation, and ordinarily no more than 30 days for unresolved or rescheduled matters, subject to law, legal hold, fraud/security investigation, or a documented customer request. This policy requires legal and operational approval before launch.
+Legal entity details, any published mailing address, approved service-area list, and legal-review status require approved source material.
 
-## Sources of truth
+## Related
 
-- Product and security boundaries: [Product Blueprint](../README.md), [Secure Document Storage](../03-product/secure-document-storage.md), and [Document Security Service](../03-product/document-security-service.md).
-- Launch evidence: [Document Scanner Staging Acceptance](../03-product/document-scanner-staging-acceptance.md) and [staging safety guidance](../engineering/staging-and-production-safety.md).
-- Launch decision: [Launch Checklist](launch-checklist.md).
+- [Mission, Vision, and Values](./Mission-Vision-Values.md)
+- [Google Business Profile](../06-google-business/Google-Business-Profile.md)

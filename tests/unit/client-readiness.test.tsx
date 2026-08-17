@@ -12,13 +12,13 @@ function canonical(state: AppointmentReadiness["state"]): AppointmentReadiness {
 describe("Client Workspace readiness", () => {
   it.each([
     ["waiting_for_payment", "payment_needed", "Payment needed"],
-    ["waiting_for_documents", "documents_needed", "Upload your documents"],
-    ["waiting_for_review", "documents_under_review", "Documents under review"],
+    ["waiting_for_documents", "documents_needed", "Upload your document"],
+    ["waiting_for_review", "documents_under_review", "We’re reviewing your documents"],
     ["waiting_for_replacement", "replacement_needed", "A replacement document is needed"],
-    ["waiting_for_session", "waiting_for_session", "Waiting for your online session"],
+    ["waiting_for_session", "waiting_for_session", "Your online session is being prepared"],
     ["ready_for_notary", "ready_for_notarization", "Ready for your online notarization"],
     ["in_progress", "session_in_progress", "Your online session is in progress"],
-    ["completed", "appointment_completed", "Appointment completed"],
+    ["completed", "appointment_completed", "Appointment marked complete"],
     ["cancelled", "appointment_cancelled", "Appointment cancelled"],
     ["blocked", "action_required", "Action required"]
   ] as const)("maps %s to the safe %s projection", (canonicalState, customerState, label) => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { appointmentDocumentStorage, appointmentDocumentStorageKey, privateAppointmentDocumentStorage, validateAppointmentDocumentSignature, validateAppointmentDocumentUploadMetadata } from "@/lib/server/document-storage";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { appointmentDocumentStorage, appointmentDocumentStorageKey, createSupabaseAppointmentDocumentPreviewStorage, privateAppointmentDocumentStorage, validateAppointmentDocumentSignature, validateAppointmentDocumentUploadMetadata } from "@/lib/server/document-storage";
 
 describe("appointment document storage configuration", () => {
   it("uses an opaque, tenant- and appointment-scoped private storage key", () => {
@@ -29,4 +30,11 @@ it("requires PDF, JPEG, and PNG signatures to match the declared type", () => {
   expect(() => validateAppointmentDocumentSignature("image/jpeg", new Uint8Array([0xff, 0xd8, 0xff]).buffer)).not.toThrow();
   expect(() => validateAppointmentDocumentSignature("image/png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer)).not.toThrow();
   expect(() => validateAppointmentDocumentSignature("application/pdf", new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer)).toThrow();
+});
+
+it("creates only short-lived signed URLs through the server-only preview adapter", async () => {
+  const createSignedUrl = async (key: string, expiresIn: number) => ({ data: { signedUrl: `https://storage.example/${key}?temporary=true&expires=${expiresIn}` }, error: null });
+  const supabase = { storage: { from: () => ({ createSignedUrl }) } } as unknown as SupabaseClient;
+  const previewStorage = createSupabaseAppointmentDocumentPreviewStorage(supabase);
+  await expect(previewStorage.createSignedUrl("opaque-document-key", 60)).resolves.toContain("expires=60");
 });

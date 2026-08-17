@@ -36,8 +36,8 @@ const settings: BusinessSettings = {
   defaultDeliveryMethod: "remote_online_notarization",
   pricingHeadline: "Clear pricing shown before your appointment is confirmed.",
   pricingNote: "Pricing content is awaiting business approval and can be updated in admin settings.",
-  privacyPolicyVersion: "legal-review-placeholder-2026-07",
-  termsVersion: "legal-review-placeholder-2026-07"
+  privacyPolicyVersion: "privacy-policy-2026-08-09",
+  termsVersion: "terms-of-service-2026-08-09"
 };
 
 let rules: AppointmentRules = {
@@ -68,7 +68,7 @@ let services: OrganizationService[] = [
     id: serviceId,
     internalName: "remote_online_notarization",
     customerName: "Remote online notarization appointment",
-    description: "Pricing is configurable and should be finalized before public launch.",
+    description: "Current service pricing is provided before payment is requested.",
     basePriceCents: null,
     currency: "USD",
     defaultDurationMinutes: 30,

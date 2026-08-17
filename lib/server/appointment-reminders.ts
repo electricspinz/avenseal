@@ -4,6 +4,15 @@ import { communicationIdempotencyKey, renderEmailTemplate } from "@/lib/server/c
 export type AppointmentReminderTemplate = "appointment_confirmation" | "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request" | "appointment_cancelled" | "appointment_rescheduled";
 type ScheduledReminderTemplate = "appointment_reminder_24h" | "appointment_reminder_2h" | "appointment_followup" | "appointment_review_request";
 type ReminderSettings = { emailRemindersEnabled: boolean; reviewRequestsEnabled: boolean; reminder24hMinutesBefore: number; reminder2hMinutesBefore: number; followupMinutesAfter: number; reviewRequestMinutesAfter: number };
+export type ReminderProcessingFailureCategory = "due_reminder_query_failure" | "reminder_promotion_rpc_failure";
+
+/** Temporary route-diagnostic boundary. Never include the underlying database error. */
+export class ReminderProcessingError extends Error {
+  constructor(readonly category: ReminderProcessingFailureCategory) {
+    super("Reminder processing failed.");
+    this.name = "ReminderProcessingError";
+  }
+}
 
 export function reminderSchedule(startsAt: Date, settings: ReminderSettings) {
   return [
@@ -42,8 +51,14 @@ export async function cancelAppointmentReminders(supabase: SupabaseClient, appoi
 }
 
 export async function processAppointmentReminders(supabase: SupabaseClient, limit = 20) {
-  const { data, error } = await supabase.from("appointment_reminders").select("*, appointment_requests!inner(*, customers!inner(*))").eq("status", "scheduled").lte("scheduled_for", new Date().toISOString()).order("scheduled_for").limit(Math.min(limit, 50));
-  if (error) throw error;
+  const { data, error } = await (async () => {
+    try {
+      return await supabase.from("appointment_reminders").select("*, appointment_requests!inner(*, customers!inner(*))").eq("status", "scheduled").lte("scheduled_for", new Date().toISOString()).order("scheduled_for").limit(Math.min(limit, 50));
+    } catch {
+      throw new ReminderProcessingError("due_reminder_query_failure");
+    }
+  })();
+  if (error) throw new ReminderProcessingError("due_reminder_query_failure");
   let queued = 0;
   for (const reminder of data ?? []) {
     const appointment = reminder.appointment_requests;
@@ -51,8 +66,14 @@ export async function processAppointmentReminders(supabase: SupabaseClient, limi
     const subject = `Avenseal: appointment reminder`;
     const html = renderEmailTemplate({ greetingName: customer.full_name, body: `This is a reminder about your appointment on ${appointment.preferred_date} at ${String(appointment.preferred_time).slice(0, 5)}.`, footer: "Questions? Reply to this email." });
     const key = communicationIdempotencyKey({ organizationId: reminder.organization_id, appointmentId: reminder.appointment_id, type: reminder.template as "appointment_reminder_24h", recipient: customer.email });
-    const { data: communicationId, error: promotionError } = await supabase.rpc("promote_appointment_reminder", { p_reminder_id: reminder.id, p_subject: subject, p_html: html, p_recipient_email: customer.email, p_idempotency_key: key, p_provider: "gmail_smtp" });
-    if (promotionError) throw promotionError;
+    const { data: communicationId, error: promotionError } = await (async () => {
+      try {
+        return await supabase.rpc("promote_appointment_reminder", { p_reminder_id: reminder.id, p_subject: subject, p_html: html, p_recipient_email: customer.email, p_idempotency_key: key, p_provider: "gmail_smtp" });
+      } catch {
+        throw new ReminderProcessingError("reminder_promotion_rpc_failure");
+      }
+    })();
+    if (promotionError) throw new ReminderProcessingError("reminder_promotion_rpc_failure");
     if (communicationId) queued++;
   }
   return { considered: (data ?? []).length, queued };

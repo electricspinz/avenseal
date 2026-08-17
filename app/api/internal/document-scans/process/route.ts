@@ -5,16 +5,26 @@ import { parseDocumentScannerConfiguration } from "@/lib/server/document-securit
 import { processDocumentScanBatch } from "@/lib/server/document-security/scan-jobs";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 
-function authorized(request: NextRequest) {
-  const secret = getServerEnv().DOCUMENT_SCAN_WORKER_SECRET;
+type DocumentScanWorkerAuthDiagnostic = "worker_secret_missing" | "worker_secret_mismatch" | "supabase_service_config_missing";
+
+function authorizationDiagnostic(request: NextRequest): DocumentScanWorkerAuthDiagnostic | null {
+  const env = getServerEnv();
+  const secret = env.DOCUMENT_SCAN_WORKER_SECRET;
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!secret || !token) return false;
-  return timingSafeEqual(createHash("sha256").update(secret).digest(), createHash("sha256").update(token).digest());
+  if (!secret) return "worker_secret_missing";
+  if (!token || !timingSafeEqual(createHash("sha256").update(secret).digest(), createHash("sha256").update(token).digest())) return "worker_secret_mismatch";
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return "supabase_service_config_missing";
+  return null;
 }
 
 export async function POST(request: NextRequest) {
   if (request.headers.get("origin")) return NextResponse.json({ error: "Invalid request origin." }, { status: 403, headers: { "Cache-Control": "no-store" } });
-  if (!authorized(request) || !hasSupabaseServiceConfig()) return NextResponse.json({ error: "Unauthorized." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  // TEMPORARY: remove after the production worker-authentication reproduction is classified.
+  const diagnostic = authorizationDiagnostic(request);
+  if (diagnostic || !hasSupabaseServiceConfig()) {
+    console.warn("[document-scan-worker]", { category: diagnostic ?? "supabase_service_config_missing" });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  }
   try {
     // Do not claim quarantined work when scanner configuration is disabled or invalid.
     parseDocumentScannerConfiguration();
