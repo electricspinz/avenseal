@@ -15,6 +15,7 @@ export type CommunicationsCenterQuery = Readonly<{
   to?: string;
   search?: string;
   sort?: string;
+  archived?: string;
 }>;
 
 export type CommunicationsCenterItem = Readonly<{
@@ -30,6 +31,7 @@ export type CommunicationsCenterItem = Readonly<{
   safeSummary: string;
   source: AdminCommunication["source"];
   messageId: string | null;
+  archivedAt: string | null;
 }>;
 
 export type CommunicationsCenterResult = Readonly<{
@@ -47,6 +49,7 @@ export type CommunicationsCenterResult = Readonly<{
     to?: string;
     search?: string;
     sort: CommunicationsCenterSort;
+    showArchived: boolean;
   }>;
 }>;
 
@@ -55,7 +58,7 @@ export type CommunicationsCenterRepository = Pick<typeof repository, "listAdminC
 
 export async function queryCommunicationsCenter(input: CommunicationsCenterQuery, dataSource: CommunicationsCenterRepository = repository): Promise<CommunicationsCenterResult> {
   const query = normalizeQuery(input);
-  const page = await dataSource.listAdminCommunications({ page: number(input.page), status: query.status, type: query.purpose });
+  const page = await dataSource.listAdminCommunications({ page: number(input.page), status: query.status, type: query.purpose, includeArchived: query.showArchived });
   const records = page.records
     .filter((record) => matches(record, query))
     .map(toItem)
@@ -81,7 +84,8 @@ export function normalizeQuery(input: CommunicationsCenterQuery) {
     from,
     to,
     search: safeText(input.search),
-    sort: input.sort === "oldest" ? "oldest" as const : "newest" as const
+    sort: input.sort === "oldest" ? "oldest" as const : "newest" as const,
+    showArchived: input.archived === "on"
   };
 }
 
@@ -108,7 +112,8 @@ function toItem(record: AdminCommunication): CommunicationsCenterItem {
     occurredAt: communicationOccurredAt(record),
     safeSummary: communicationSafeSummary(record.status),
     source: record.source,
-    messageId: record.messageId
+    messageId: record.messageId,
+    archivedAt: record.archivedAt
   };
 }
 
