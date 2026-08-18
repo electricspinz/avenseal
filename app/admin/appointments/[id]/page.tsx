@@ -19,6 +19,7 @@ import { AdminAppointmentReschedule } from "@/components/admin-appointment-resch
 import { deriveAppointmentNextAction } from "@/lib/server/appointment-next-action";
 import { AdminAppointmentNextActionPanel } from "@/components/admin-appointment-next-action-panel";
 import { isCustomerVisibleExternalSession } from "@/lib/server/external-sessions";
+import { AdminFloridaRonSessionAssistant } from "@/components/admin-florida-ron-session-assistant";
 import { AdminProviderWorkspace } from "@/components/admin-provider-workspace";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +70,7 @@ export default async function AppointmentDetailPage({ params, searchParams }: { 
         <div className="space-y-6">
           <AppointmentReadinessCard readiness={readiness} />
           <AdminAppointmentNextActionPanel action={nextAction} />
+          <AdminFloridaRonSessionAssistant appointmentId={appointment.id} />
           <AdminProviderWorkspace customerName={appointment.customer.fullName} serviceName={appointment.serviceNameSnapshot ?? "Service not recorded"} scheduledAt={`${formatDate(appointment.preferredDate)} at ${formatTime(appointment.preferredTime)}`} appointmentStatus={appointment.status} paymentStatus={payments[0]?.status ?? null} readinessSummary={readiness.summary} action={nextAction} communications={communications} documents={<AdminAppointmentDocumentsCard appointmentId={appointment.id} documents={documents.map((document): AdminAppointmentDocumentPresentation => ({ id: document.id, originalFilename: document.originalFilename, contentType: document.contentType, sizeBytes: document.sizeBytes, status: document.status, reviewerName: document.reviewerName, reviewedAt: document.reviewedAt, reviewNotes: document.reviewNotes, uploadedAt: document.uploadedAt, scanStatus: document.scanStatus, storageStatus: document.storageStatus }))} />} session={<ExternalSessionCard appointmentId={appointment.id} initialSession={externalSession} />} />
           <AdminCard>
             <h2 className="text-xl font-semibold text-navy">Customer</h2>

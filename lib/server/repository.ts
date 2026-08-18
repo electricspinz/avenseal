@@ -25,6 +25,7 @@ import { enqueueAndProcessEmail, renderEmailTemplate } from "@/lib/server/commun
 import { cancelAppointmentReminders, scheduleAppointmentReminders } from "@/lib/server/appointment-reminders";
 import { clientWorkspaceExpiration, normalizeClientWorkspaceEmail } from "@/lib/server/client-workspace-magic-links";
 import { isCustomerVisibleExternalSession, type ExternalSession, type ExternalSessionInput, type ExternalSessionStatus } from "@/lib/server/external-sessions";
+import { mapFloridaRonPreparedAttempt, type AssistantStopReason, type FloridaRonModule, type FloridaRonPreparedAttempt, type PrepareSessionInput } from "@/lib/server/florida-ron-session-assistant";
 import type { ClientWorkspaceAccessToken } from "@/lib/server/client-workspace-access";
 import type { EmailDeliveryResult } from "@/lib/server/email";
 import { resolvePublicOrganization, resolvePublicOrganizationId } from "@/lib/server/organization";
@@ -884,6 +885,59 @@ export const repository = {
       .single();
     if (error) return null;
     return mapAppointment(data);
+  },
+  async getFloridaRonPreparedAttempt(organizationId: string, appointmentId: string): Promise<FloridaRonPreparedAttempt | null> {
+    if (!hasSupabaseServiceConfig()) {
+      const session = await devStore.getFloridaRonPreparedSession(organizationId, appointmentId);
+      return session ? mapFloridaRonPreparedAttempt(session) : null;
+    }
+    const { data, error } = await getSupabaseAdmin()
+      .from("florida_ron_session_assistant_sessions")
+      .select("id,workflow_version,specification_status,state,stop_reason,parameters,module_versions")
+      .eq("organization_id", organizationId)
+      .eq("appointment_request_id", appointmentId)
+      .eq("state", "prepared")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapFloridaRonPreparedAttempt(data) : null;
+  },
+  async createFloridaRonPreparedAttempt(input: { organizationId: string; appointmentId: string; actorId: string; workflowVersion: string; parameters: PrepareSessionInput; modules: FloridaRonModule[]; stopReason: AssistantStopReason | null }) {
+    const eventPayload = { previousParameters: null, nextParameters: input.parameters, workflowVersion: input.workflowVersion, specificationStatus: "candidate", moduleVersions: input.modules, stopReason: input.stopReason };
+    if (!hasSupabaseServiceConfig()) return devStore.createFloridaRonSession({ organization_id: input.organizationId, appointment_request_id: input.appointmentId, workflow_version: input.workflowVersion, specification_status: "candidate", state: "prepared", stop_reason: input.stopReason, parameters: input.parameters, module_versions: input.modules, created_by: input.actorId }, { organization_id: input.organizationId, actor_id: input.actorId, event_type: "prepared", payload: eventPayload });
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from("florida_ron_session_assistant_sessions").insert({ organization_id: input.organizationId, appointment_request_id: input.appointmentId, workflow_version: input.workflowVersion, specification_status: "candidate", state: "prepared", stop_reason: input.stopReason, parameters: input.parameters, module_versions: input.modules, created_by: input.actorId }).select("id").single();
+    if (error || !data) throw new Error("Session preparation is unavailable.");
+    const { error: eventError } = await supabase.from("florida_ron_session_assistant_events").insert({ session_id: data.id, organization_id: input.organizationId, actor_id: input.actorId, event_type: "prepared", payload: eventPayload });
+    if (eventError) throw new Error("Session preparation is unavailable.");
+    return { id: String(data.id) };
+  },
+  async updateFloridaRonPreparedAttempt(input: { organizationId: string; appointmentId: string; actorId: string; parameters: PrepareSessionInput; modules: FloridaRonModule[]; stopReason: AssistantStopReason | null }) {
+    const current = !hasSupabaseServiceConfig() ? await devStore.getFloridaRonPreparedSession(input.organizationId, input.appointmentId) : await getSupabaseAdmin().from("florida_ron_session_assistant_sessions").select("id,parameters,module_versions,workflow_version").eq("organization_id", input.organizationId).eq("appointment_request_id", input.appointmentId).eq("state", "prepared").order("created_at", { ascending: false }).limit(1).maybeSingle().then(({ data, error }) => { if (error) throw error; return data; });
+    if (!current) return null;
+    const payload = { previousParameters: current.parameters, nextParameters: input.parameters, workflowVersion: current.workflow_version, previousModuleVersions: current.module_versions, nextModuleVersions: input.modules, stopReason: input.stopReason };
+    if (!hasSupabaseServiceConfig()) return devStore.updateFloridaRonPreparedSession(current.id, input.organizationId, input.parameters, input.modules, input.stopReason, { organization_id: input.organizationId, actor_id: input.actorId, event_type: "parameters_changed", payload });
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("florida_ron_session_assistant_sessions").update({ parameters: input.parameters, stop_reason: input.stopReason, module_versions: input.modules }).eq("id", current.id).eq("organization_id", input.organizationId).eq("state", "prepared");
+    if (error) throw error;
+    const { error: eventError } = await supabase.from("florida_ron_session_assistant_events").insert({ session_id: current.id, organization_id: input.organizationId, actor_id: input.actorId, event_type: "parameters_changed", payload });
+    if (eventError) throw eventError;
+    return { id: String(current.id) };
+  },
+  async getFloridaRonHistory(organizationId: string, appointmentId: string) {
+    if (!hasSupabaseServiceConfig()) return devStore.getFloridaRonHistory(organizationId, appointmentId);
+    const supabase = getSupabaseAdmin();
+    const { data: sessions, error } = await supabase.from("florida_ron_session_assistant_sessions").select("id,workflow_version,specification_status,state,outcome,stop_reason,parameters,module_versions,provider_reference,created_at,started_at,completed_or_stopped_at").eq("organization_id", organizationId).eq("appointment_request_id", appointmentId).order("created_at", { ascending: false });
+    if (error) throw error;
+    return Promise.all((sessions ?? []).map(async (session) => { const { data: events, error: eventError } = await supabase.from("florida_ron_session_assistant_events").select("id,event_type,payload,actor_id,created_at").eq("organization_id", organizationId).eq("session_id", session.id).order("created_at", { ascending: true }); if (eventError) throw eventError; return { ...session, events: events ?? [] }; }));
+  },
+  async transitionFloridaRonPreparedAttempt(input: { organizationId: string; appointmentId: string; actorId: string; state: "stopped" | "preview_completed"; outcome: string; stopReason: AssistantStopReason | null; eventType: "preview_stopped" | "preview_completed"; payload: Record<string, unknown> }) {
+    if (!hasSupabaseServiceConfig()) { const current = await devStore.getFloridaRonPreparedSession(input.organizationId, input.appointmentId); return current ? devStore.transitionFloridaRonPreparedSession(current.id, input.organizationId, input.state, input.outcome, input.stopReason, { organization_id: input.organizationId, actor_id: input.actorId, event_type: input.eventType, payload: input.payload }) : null; }
+    const supabase = getSupabaseAdmin(); const { data: current, error } = await supabase.from("florida_ron_session_assistant_sessions").select("id").eq("organization_id", input.organizationId).eq("appointment_request_id", input.appointmentId).eq("state", "prepared").order("created_at", { ascending: false }).limit(1).maybeSingle(); if (error) throw error; if (!current) return null;
+    const { error: updateError } = await supabase.from("florida_ron_session_assistant_sessions").update({ state: input.state, outcome: input.outcome, stop_reason: input.stopReason, completed_or_stopped_at: new Date().toISOString() }).eq("id", current.id).eq("organization_id", input.organizationId).eq("state", "prepared"); if (updateError) throw updateError;
+    const { error: eventError } = await supabase.from("florida_ron_session_assistant_events").insert({ session_id: current.id, organization_id: input.organizationId, actor_id: input.actorId, event_type: input.eventType, payload: input.payload }); if (eventError) throw eventError;
+    return { id: String(current.id) };
   },
   async getExternalSession(organizationId: string, appointmentId: string): Promise<ExternalSession | null> {
     if (!hasSupabaseServiceConfig()) return developmentExternalSessions.get(externalSessionKey(organizationId, appointmentId)) ?? null;

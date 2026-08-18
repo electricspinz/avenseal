@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
 import type { AppointmentServiceSnapshot } from "@/lib/server/appointment-services";
+import type { AssistantStopReason, FloridaRonModule, PrepareSessionInput } from "@/lib/server/florida-ron-session-assistant";
 
 const organizationId = "00000000-0000-4000-8000-000000000001";
 const serviceId = "00000000-0000-4000-8000-000000000002";
@@ -158,7 +159,45 @@ const history: StatusHistoryEntry[] = [
 
 const notes: InternalNote[] = [];
 
+export type DevelopmentFloridaRonSession = {
+  id: string; organization_id: string; appointment_request_id: string; workflow_version: string;
+  specification_status: "candidate"; state: "prepared" | "stopped" | "preview_completed";
+  outcome: string | null; stop_reason: AssistantStopReason | null; parameters: PrepareSessionInput;
+  module_versions: FloridaRonModule[]; provider_reference: string | null; created_by: string;
+  created_at: string; started_at: string | null; completed_or_stopped_at: string | null;
+};
+export type DevelopmentFloridaRonEvent = { id: string; session_id: string; organization_id: string; actor_id: string; event_type: string; payload: Record<string, unknown>; created_at: string };
+type DevelopmentFloridaRonState = { sessions: DevelopmentFloridaRonSession[]; events: DevelopmentFloridaRonEvent[] };
+const developmentGlobal = globalThis as typeof globalThis & { __avensealFloridaRonDevelopmentState?: DevelopmentFloridaRonState };
+const floridaRonState = developmentGlobal.__avensealFloridaRonDevelopmentState ??= { sessions: [], events: [] };
+
 export const devStore = {
+  async createFloridaRonSession(session: Omit<DevelopmentFloridaRonSession, "id" | "outcome" | "provider_reference" | "created_at" | "started_at" | "completed_or_stopped_at">, event: Omit<DevelopmentFloridaRonEvent, "id" | "session_id" | "created_at">) {
+    const created: DevelopmentFloridaRonSession = { ...session, id: id("fl_ron"), outcome: null, provider_reference: null, created_at: new Date().toISOString(), started_at: null, completed_or_stopped_at: null };
+    floridaRonState.sessions.unshift(created);
+    floridaRonState.events.push({ ...event, id: id("fl_ron_event"), session_id: created.id, created_at: new Date().toISOString() });
+    return created;
+  },
+  async getFloridaRonPreparedSession(organizationId: string, appointmentId: string) {
+    return floridaRonState.sessions.find((session) => session.organization_id === organizationId && session.appointment_request_id === appointmentId && session.state === "prepared") ?? null;
+  },
+  async updateFloridaRonPreparedSession(sessionId: string, organizationId: string, parameters: PrepareSessionInput, modules: FloridaRonModule[], stopReason: AssistantStopReason | null, event: Omit<DevelopmentFloridaRonEvent, "id" | "session_id" | "created_at">) {
+    const session = floridaRonState.sessions.find((item) => item.id === sessionId && item.organization_id === organizationId && item.state === "prepared");
+    if (!session) return null;
+    session.parameters = parameters; session.module_versions = modules; session.stop_reason = stopReason;
+    floridaRonState.events.push({ ...event, id: id("fl_ron_event"), session_id: session.id, created_at: new Date().toISOString() });
+    return session;
+  },
+  async transitionFloridaRonPreparedSession(sessionId: string, organizationId: string, state: "stopped" | "preview_completed", outcome: string, stopReason: AssistantStopReason | null, event: Omit<DevelopmentFloridaRonEvent, "id" | "session_id" | "created_at">) {
+    const session = floridaRonState.sessions.find((item) => item.id === sessionId && item.organization_id === organizationId && item.state === "prepared");
+    if (!session) return null;
+    session.state = state; session.outcome = outcome; session.stop_reason = stopReason; session.completed_or_stopped_at = new Date().toISOString();
+    floridaRonState.events.push({ ...event, id: id("fl_ron_event"), session_id: session.id, created_at: new Date().toISOString() });
+    return session;
+  },
+  async getFloridaRonHistory(organizationId: string, appointmentId: string) {
+    return floridaRonState.sessions.filter((session) => session.organization_id === organizationId && session.appointment_request_id === appointmentId).map((session) => ({ ...session, events: floridaRonState.events.filter((event) => event.organization_id === organizationId && event.session_id === session.id) }));
+  },
   async createAppointment(input: BookingInput, snapshot: AppointmentServiceSnapshot) {
     const timestamp = new Date().toISOString();
     const customer: Customer = {
