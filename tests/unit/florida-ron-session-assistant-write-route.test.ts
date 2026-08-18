@@ -36,8 +36,8 @@ function harness(current: Record<string, unknown> | null = { id: "session-1", st
   const supabase = { from: (table: string) => table === "florida_ron_session_assistant_sessions" ? sessions : { insert: async (value: Record<string, unknown>) => { events.push(value); return { error: null }; } } };
   mocks.context.mockResolvedValue(context);
   mocks.getAppointment.mockResolvedValue(appointment);
-  mocks.create.mockImplementation(async (value: Record<string, unknown>) => { sessionInserts.push(value); events.push({ event_type: "prepared", actor_id: value.actorId, payload: { previousParameters: null, nextParameters: value.parameters, workflowVersion: value.workflowVersion, moduleVersions: value.modules, stopReason: value.stopReason } }); return { id: "session-1" }; });
-  mocks.update.mockImplementation(async (value: Record<string, unknown>) => { if (!current) return null; sessionUpdates.push(value); events.push({ event_type: "parameters_changed", actor_id: value.actorId, payload: { previousParameters: current.parameters, nextParameters: value.parameters, workflowVersion: current.workflow_version, previousModuleVersions: current.module_versions, nextModuleVersions: value.modules, stopReason: value.stopReason } }); return { id: "session-1" }; });
+  mocks.create.mockImplementation(async (value: Record<string, unknown>) => { sessionInserts.push(value); events.push({ session_id: "session-1", organization_id: value.organizationId, event_type: "prepared", actor_id: value.actorId, payload: { previousParameters: null, nextParameters: value.parameters, workflowVersion: value.workflowVersion, moduleVersions: value.modules, stopReason: value.stopReason } }); return { id: "session-1" }; });
+  mocks.update.mockImplementation(async (value: Record<string, unknown>) => { if (!current) return null; sessionUpdates.push(value); events.push({ session_id: "session-1", organization_id: value.organizationId, event_type: "parameters_changed", actor_id: value.actorId, payload: { previousParameters: current.parameters, nextParameters: value.parameters, workflowVersion: current.workflow_version, previousModuleVersions: current.module_versions, nextModuleVersions: value.modules, stopReason: value.stopReason } }); return { id: "session-1" }; });
   mocks.getSupabaseAdmin.mockReturnValue(supabase);
   return { sessionInserts, sessionUpdates, events, filters };
 }
@@ -47,8 +47,8 @@ describe("Florida RON session assistant write routes", () => {
     const test = harness();
     const response = await POST(request("POST", input), params());
     expect(response.status).toBe(201);
-    expect(test.sessionInserts[0]).toMatchObject({ organizationId: "org-1", appointmentId: "appointment-1", workflowVersion: "FL-RON-1.0", parameters: input, modules: expect.arrayContaining([{ id: "FL-CORE", version: "1.0" }]) });
-    expect(test.events).toEqual([expect.objectContaining({ session_id: "session-1", organization_id: "org-1", actor_id: "owner-1", event_type: "prepared", payload: expect.objectContaining({ previousParameters: null, nextParameters: input, workflowVersion: "FL-RON-1.0", moduleVersions: expect.arrayContaining([{ id: "FL-CORE", version: "1.0" }]), stopReason: null }) })]);
+    expect(test.sessionInserts[0]).toMatchObject({ organizationId: "org-1", appointmentId: "appointment-1", workflowVersion: "FL-RON-1.0", parameters: input, modules: expect.arrayContaining([expect.objectContaining({ id: "FL-CORE", version: "1.0", classification: "required_by_florida_law" })]) });
+    expect(test.events).toEqual([expect.objectContaining({ session_id: "session-1", organization_id: "org-1", actor_id: "owner-1", event_type: "prepared", payload: expect.objectContaining({ previousParameters: null, nextParameters: input, workflowVersion: "FL-RON-1.0", moduleVersions: expect.arrayContaining([expect.objectContaining({ id: "FL-CORE", version: "1.0", classification: "required_by_florida_law" })]), stopReason: null }) })]);
   });
 
   it("rejects malformed input, cross-tenant appointments, and non-owner/admin write contexts", async () => {
@@ -73,8 +73,8 @@ describe("Florida RON session assistant write routes", () => {
     const response = await PUT(request("PUT", georgia), params());
     expect(response.status).toBe(200);
     expect((await response.json()).modules.map((module: { id: string }) => module.id)).toContain("FL-OUTSIDE-FL");
-    expect(test.sessionUpdates[0]).toMatchObject({ organizationId: "org-1", appointmentId: "appointment-1", parameters: expect.objectContaining({ principals: [expect.objectContaining({ location: "outside_florida" })] }), modules: expect.arrayContaining([{ id: "FL-OUTSIDE-FL", version: "1.0" }]) });
-    expect(test.events[0]).toMatchObject({ session_id: "session-1", actor_id: "owner-1", event_type: "parameters_changed", payload: { previousParameters: input, nextParameters: expect.objectContaining({ principals: [expect.objectContaining({ location: "outside_florida" })] }), workflowVersion: "FL-RON-1.0", previousModuleVersions: originalModules, nextModuleVersions: expect.arrayContaining([{ id: "FL-OUTSIDE-FL", version: "1.0" }]), stopReason: null } });
+    expect(test.sessionUpdates[0]).toMatchObject({ organizationId: "org-1", appointmentId: "appointment-1", parameters: expect.objectContaining({ principals: [expect.objectContaining({ location: "outside_florida" })] }), modules: expect.arrayContaining([expect.objectContaining({ id: "FL-OUTSIDE-FL", version: "1.0", classification: "conditional_florida_requirement" })]) });
+    expect(test.events[0]).toMatchObject({ session_id: "session-1", actor_id: "owner-1", event_type: "parameters_changed", payload: { previousParameters: input, nextParameters: expect.objectContaining({ principals: [expect.objectContaining({ location: "outside_florida" })] }), workflowVersion: "FL-RON-1.0", previousModuleVersions: originalModules, nextModuleVersions: expect.arrayContaining([expect.objectContaining({ id: "FL-OUTSIDE-FL", version: "1.0", classification: "conditional_florida_requirement" })]), stopReason: null } });
     expect(original.module_versions).toEqual(originalModules);
     expect(original.parameters).toEqual(input);
   });

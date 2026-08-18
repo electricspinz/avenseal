@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assistantStopReasons, advanceFloridaRonSession, completeFloridaRonSession, floridaRonModules, startFloridaRonSession, stopFloridaRonSession } from "@/lib/server/florida-ron-session-assistant";
 
@@ -20,7 +20,7 @@ describe("Florida RON Candidate terminal states", () => {
   it("keeps the Candidate production gate closed and persists separate preview terminals", async () => {
     expect(startFloridaRonSession(candidate)).toEqual(candidate);
     expect(completeFloridaRonSession({ ...candidate, state: "final_review" }, true)).not.toMatchObject({ state: "completed" });
-    const sql = await readFile(fileURLToPath(new URL("../../supabase/migrations/0030_florida_ron_session_assistant_candidate_terminals.sql", import.meta.url)), "utf8");
+    const sql = await readFile(join(process.cwd(), "supabase/migrations/0030_florida_ron_session_assistant_candidate_terminals.sql"), "utf8");
     expect(sql).toContain("preview_completed");
     expect(sql).toContain("Candidate Florida RON attempts cannot enter production ceremony execution");
     expect(sql).toContain("Terminal Florida RON attempts cannot transition");
