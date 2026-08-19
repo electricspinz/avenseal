@@ -81,4 +81,16 @@ describe("AdminFloridaRonSessionAssistant", () => {
     expect((screen.getByRole("button", { name: "Advance module" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Complete session" }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("shows the acknowledgment-language controls only for acknowledgment acts", async () => {
+    const jurat = attempt({ parameters: { ...baseParameters, notarialAct: "jurat" } });
+    mockSessionRequests([response({ attempt: jurat })]);
+    render(<AdminFloridaRonSessionAssistant appointmentId="appointment-1" />);
+    await screen.findByLabelText("Notarial act");
+    expect(screen.queryByLabelText("Principal 1 English language understanding")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Notarial act"), { target: { value: "acknowledgment_individual" } });
+    expect(screen.getByLabelText("Principal 1 English language understanding")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Notarial act"), { target: { value: "other_authorized" } });
+    expect(screen.queryByLabelText("Principal 1 English language understanding")).toBeNull();
+  });
 });

@@ -13,6 +13,7 @@ const attempt: FloridaRonPreparedAttempt = {
   specificationStatus: "candidate",
   modules: [{ id: "FL-CORE", version: "1.0", classification: "required_by_florida_law" }],
   stopReason: "identity",
+  controlType: "hard_stop",
   productionEnabled: false
 };
 
