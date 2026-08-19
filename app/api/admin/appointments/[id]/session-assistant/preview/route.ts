@@ -10,7 +10,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!appointment || appointment.organizationId !== context.organizationId) return unavailable(404);
     const attempt = await repository.getFloridaRonPreparedAttempt(context.organizationId, appointment.id);
     if (!attempt || attempt.state !== "prepared") return unavailable(404);
-    const modules = await readFloridaRonCandidatePreviewModules(attempt.modules);
+    const modules = await readFloridaRonCandidatePreviewModules(attempt.modules, attempt.workflowVersion);
     return NextResponse.json({ attempt: { sessionId: attempt.sessionId, state: attempt.state, workflowVersion: attempt.workflowVersion, specificationStatus: attempt.specificationStatus, parameters: attempt.parameters, productionEnabled: attempt.productionEnabled }, modules }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return unavailable(403);
