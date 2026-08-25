@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/0021_communication_message_archiving.sql"), "utf8");
+const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/0032_communication_message_archiving_reconcile.sql"), "utf8");
 
 describe("communication archiving migration", () => {
   it("adds durable message-level archive fields and preserves the reminder lifecycle", () => {

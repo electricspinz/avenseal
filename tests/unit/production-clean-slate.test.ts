@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { isActionRequiredEligible } from "@/lib/server/action-required-eligibility";
 
-const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/0032_production_operational_cutover.sql"), "utf8");
+const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/0033_production_operational_cutover.sql"), "utf8");
 const cutover = { productionCutoverAt: "2026-08-21T00:00:00.000Z" };
 
 describe("Production Clean Slate eligibility", () => {
