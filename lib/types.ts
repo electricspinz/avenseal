@@ -72,6 +72,8 @@ export interface AppointmentRequest {
   preferredTime: string;
   urgency: "same_day" | "next_available" | "specific_date" | "not_urgent";
   administrativeNotes: string | null;
+  /** Server-controlled structural marker; never supplied by public booking. */
+  isTestData?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -304,6 +306,8 @@ export interface AdminCommunication {
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+  /** Structural appointment marker projected by the admin communications view. */
+  isTestData?: boolean;
 }
 
 export interface AdminCommunicationPage {

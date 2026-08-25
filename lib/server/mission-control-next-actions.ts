@@ -12,6 +12,7 @@ import {
 import { createAppointmentDocumentRepository } from "@/lib/server/document-repository";
 import { getSupabaseAdmin, hasSupabaseServiceConfig } from "@/lib/supabase/server";
 import { repository } from "@/lib/server/repository";
+import { isActionRequiredEligible, type ProductionCutover } from "@/lib/server/action-required-eligibility";
 
 export type MissionControlAppointmentAction = Readonly<{
   appointmentId: string;
@@ -47,6 +48,7 @@ export type MissionControlNextActionDependencies = Readonly<{
   listDocumentSources: (organizationId: string, appointmentIds: readonly string[]) => Promise<readonly DocumentSource[]>;
   listSessionSources: (appointmentIds: readonly string[]) => Promise<readonly SessionSource[]>;
   listCommunicationSources: (appointmentIds: readonly string[]) => Promise<readonly CommunicationSource[]>;
+  getProductionCutover?: () => Promise<ProductionCutover>;
 }>;
 
 const dependencies: MissionControlNextActionDependencies = {
@@ -58,6 +60,7 @@ const dependencies: MissionControlNextActionDependencies = {
   },
   listSessionSources: (appointmentIds) => repository.listExternalSessionNextActionSources(appointmentIds),
   listCommunicationSources: (appointmentIds) => repository.listExternalSessionAvailableCommunicationSources(appointmentIds),
+  getProductionCutover: () => repository.getProductionCutover(),
 };
 
 const nonAttentionActions = new Set(["no_action_required", "ready_for_appointment_review", "session_in_progress"]);
@@ -78,12 +81,14 @@ export async function loadMissionControlAppointmentActions(
   const scopedAppointments = appointments.filter((appointment) => appointment.organizationId === organizationId);
   const appointmentIds = scopedAppointments.map((appointment) => appointment.id);
   const appointmentIdSet = new Set(appointmentIds);
-  const [paymentsResult, documentsResult, sessionsResult, communicationsResult] = await Promise.allSettled([
+  const [paymentsResult, documentsResult, sessionsResult, communicationsResult, cutoverResult] = await Promise.allSettled([
     dataSource.listPaymentSources(appointmentIds),
     dataSource.listDocumentSources(organizationId, appointmentIds),
     dataSource.listSessionSources(appointmentIds),
     dataSource.listCommunicationSources(appointmentIds),
+    dataSource.getProductionCutover ? dataSource.getProductionCutover() : Promise.resolve({ productionCutoverAt: null }),
   ]);
+  const cutover = cutoverResult.status === "fulfilled" ? cutoverResult.value : { productionCutoverAt: null };
 
   const payments = latestByAppointment(
     paymentsResult.status === "fulfilled" ? paymentsResult.value : [],
@@ -133,7 +138,7 @@ export async function loadMissionControlAppointmentActions(
         serviceName: appointment.serviceNameSnapshot ?? "Service not recorded",
         appointmentStatus: appointment.status,
         action,
-        attention: attentionFromAction(appointment, action),
+        attention: attentionFromAction(appointment, action, cutover),
       };
     })
     .sort(compareAppointmentActions);
@@ -195,8 +200,9 @@ function hasCustomerEligibleSession(
   }
 }
 
-function attentionFromAction(appointment: AppointmentRequest, action: AppointmentNextAction): AttentionIssue | null {
+function attentionFromAction(appointment: AppointmentRequest, action: AppointmentNextAction, cutover: ProductionCutover): AttentionIssue | null {
   if (nonAttentionActions.has(action.kind)) return null;
+  if (!isActionRequiredEligible({ isTestData: appointment.isTestData, requiresAction: true }, cutover)) return null;
   return {
     id: `appointment-next-action:${appointment.id}:${action.kind}`,
     priority: priorityForAction(action),
