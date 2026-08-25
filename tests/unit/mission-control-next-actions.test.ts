@@ -115,4 +115,23 @@ describe("Mission Control appointment actions", () => {
     expect(unknown?.action.kind).toBe("review_appointment");
     expect(crossTenant?.action.kind).toBe("review_payment");
   });
+
+  it("keeps test document-security warnings out of the production Action Required population without changing the underlying action", async () => {
+    const item = await firstAction({
+      listAppointments: async () => [appointment({ isTestData: true })],
+      listDocumentSources: async () => [{ ...approvedDocument, scanStatus: "infected" }],
+      getProductionCutover: async () => ({ productionCutoverAt: "2026-08-21T00:00:00.000Z" })
+    });
+    expect(item?.action.kind).toBe("review_document_security");
+    expect(item?.attention).toBeNull();
+  });
+
+  it("keeps a production document-security warning actionable", async () => {
+    const item = await firstAction({
+      listDocumentSources: async () => [{ ...approvedDocument, scanStatus: "infected" }],
+      getProductionCutover: async () => ({ productionCutoverAt: "2026-08-21T00:00:00.000Z" })
+    });
+    expect(item?.attention?.category).toBe("appointments");
+    expect(item?.attention?.title).toBe("Document security review required");
+  });
 });

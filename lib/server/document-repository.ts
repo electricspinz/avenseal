@@ -447,11 +447,22 @@ export function createAppointmentDocumentRepository(supabase: SupabaseClient) {
       if (appointmentIds.length === 0) return [];
       const { data, error } = await supabase
         .from("appointment_document_files")
-        .select("organization_id,appointment_request_id,status,scan_status,storage_status,deleted_at")
+        .select("id,organization_id,appointment_request_id,status,scan_status,storage_status,deleted_at")
         .eq("organization_id", organizationId)
         .in("appointment_request_id", [...appointmentIds]);
       if (error) throw error;
-      return (data ?? []).map((row) => ({
+      const documentIds = (data ?? []).map((row) => String(row.id)).filter(Boolean);
+      const { data: dismissals, error: dismissalError } = documentIds.length === 0
+        ? { data: [], error: null }
+        : await supabase
+          .from("operational_action_dismissals")
+          .select("entity_id")
+          .eq("organization_id", organizationId)
+          .eq("entity_type", "appointment_document_file")
+          .in("entity_id", documentIds);
+      if (dismissalError && dismissalError.code !== "PGRST205") throw dismissalError;
+      const dismissedIds = new Set((dismissals ?? []).map((dismissal) => String(dismissal.entity_id)));
+      return (data ?? []).filter((row) => !dismissedIds.has(String(row.id))).map((row) => ({
         organizationId: String(row.organization_id),
         appointmentId: String(row.appointment_request_id),
         status: String(row.status),

@@ -1,6 +1,7 @@
 import { isValidTimezone } from "@/lib/availability";
 import type { AdminCommunication, AppointmentRequest } from "@/lib/types";
 import { repository } from "@/lib/server/repository";
+import { isActionRequiredEligible, type ProductionCutover } from "@/lib/server/action-required-eligibility";
 
 export type AttentionPriority = "critical" | "high" | "medium" | "low";
 export type AttentionCategory = "communications" | "calendar" | "appointments" | "system";
@@ -21,9 +22,13 @@ export type AttentionIssue = {
   appointmentDate?: string;
   appointmentTime?: string;
   presentation?: "action_required" | "waiting";
+  isTestData?: boolean;
+  archivedAt?: string | null;
 };
 
-export type AttentionEngineRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations" | "getSettings">;
+export type AttentionEngineRepository = Pick<typeof repository, "listAppointments" | "listAdminCommunications" | "listIntegrations" | "getSettings"> & {
+  getProductionCutover?: () => Promise<ProductionCutover>;
+};
 
 export const attentionPriorityRank: Record<AttentionPriority, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
@@ -31,12 +36,14 @@ export async function loadAttentionIssues(
   dataSource: AttentionEngineRepository = repository,
   now = new Date()
 ): Promise<AttentionIssue[]> {
-  const [appointmentsResult, communicationsResult, integrationsResult, settingsResult] = await Promise.allSettled([
+  const [appointmentsResult, communicationsResult, integrationsResult, settingsResult, cutoverResult] = await Promise.allSettled([
     dataSource.listAppointments(),
     dataSource.listAdminCommunications({ status: "failed", page: 1 }),
     dataSource.listIntegrations(),
-    dataSource.getSettings()
+    dataSource.getSettings(),
+    dataSource.getProductionCutover ? dataSource.getProductionCutover() : Promise.resolve({ productionCutoverAt: null })
   ]);
+  const cutover = cutoverResult.status === "fulfilled" ? cutoverResult.value : { productionCutoverAt: null };
   const issues = [
     ...(communicationsResult.status === "fulfilled" ? failedCommunicationIssues(communicationsResult.value.records) : [unknownIssue("communications")]),
     ...(integrationsResult.status === "fulfilled" ? disconnectedCalendarIssues(integrationsResult.value) : [unknownIssue("integrations")]),
@@ -45,7 +52,13 @@ export async function loadAttentionIssues(
     ...(settingsResult.status === "rejected" ? [unknownIssue("settings")] : [])
   ];
 
-  return issues.sort(compareAttentionIssues);
+  return issues
+    .filter((issue) => isActionRequiredEligible({
+      archivedAt: issue.archivedAt,
+      isTestData: issue.isTestData,
+      requiresAction: issue.presentation !== "waiting"
+    }, cutover) || issue.presentation === "waiting")
+    .sort(compareAttentionIssues);
 }
 
 function failedCommunicationIssues(communications: AdminCommunication[]): AttentionIssue[] {
@@ -58,7 +71,9 @@ function failedCommunicationIssues(communications: AdminCommunication[]): Attent
     actionLabel: "Open communication",
     href: `/admin/communications/${encodeURIComponent(communication.id)}`,
     source: "communications",
-    createdAt: communication.lastAttemptedAt ?? communication.updatedAt
+    createdAt: communication.lastAttemptedAt ?? communication.updatedAt,
+    archivedAt: communication.archivedAt,
+    isTestData: communication.isTestData
   }));
 }
 
@@ -90,7 +105,8 @@ function awaitingReviewIssues(appointments: AppointmentRequest[]): AttentionIssu
       actionLabel: "Review appointment",
       href: `/admin/appointments/${appointment.id}`,
       source: "appointments" as const,
-      createdAt: appointment.updatedAt
+      createdAt: appointment.updatedAt,
+      isTestData: appointment.isTestData
     }));
 }
 

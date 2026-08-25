@@ -20,12 +20,13 @@ function failedCommunication(id: string, timestamp: string): AdminCommunication 
   return { id, source: "message", messageId: id, appointmentId: "appointment", customerId: "customer", customerName: "Customer", messageType: "booking_confirmation", recipientEmail: "customer@example.com", subject: "Confirmation", bodyHtml: null, status: "failed", scheduledFor: null, queuedAt: null, sentAt: null, attemptCount: 1, lastAttemptedAt: timestamp, lastError: "Provider error", providerMessageId: null, createdAt: timestamp, updatedAt: timestamp, archivedAt: null };
 }
 
-function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>; communications: Promise<{ records: AdminCommunication[]; currentPage: number; totalPages: number; totalRecords: number }>; integrations: Promise<Integrations>; settings: Promise<OrganizationSettings> }> = {}): AttentionEngineRepository {
+function source(overrides: Partial<{ appointments: Promise<AppointmentRequest[]>; communications: Promise<{ records: AdminCommunication[]; currentPage: number; totalPages: number; totalRecords: number }>; integrations: Promise<Integrations>; settings: Promise<OrganizationSettings>; cutover: Promise<{ productionCutoverAt: string | null }> }> = {}): AttentionEngineRepository {
   return {
     listAppointments: () => overrides.appointments ?? Promise.resolve([]),
     listAdminCommunications: () => overrides.communications ?? Promise.resolve({ records: [], currentPage: 1, totalPages: 1, totalRecords: 0 }),
     listIntegrations: () => overrides.integrations ?? Promise.resolve([{ provider: "google_calendar", status: "connected", accountLabel: null, lastConnectedAt: null, lastSyncedAt: null, lastError: null }]),
-    getSettings: () => overrides.settings ?? Promise.resolve(settings)
+    getSettings: () => overrides.settings ?? Promise.resolve(settings),
+    getProductionCutover: () => overrides.cutover ?? Promise.resolve({ productionCutoverAt: "2026-08-21T00:00:00.000Z" })
   };
 }
 
@@ -84,5 +85,17 @@ describe("Attention Engine", () => {
     const issues = await loadAttentionIssues(source({ appointments: Promise.resolve([appointment("review", "2026-07-28T10:00:00.000Z")]), integrations: Promise.reject(new Error("integrations unavailable")) }), new Date("2026-07-28T14:00:00.000Z"));
 
     expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ id: "unknown-integrations" }), expect.objectContaining({ id: "appointment-awaiting-review:review" })]));
+  });
+
+  it("excludes structurally marked test communications and appointments from the server-side Action Required population", async () => {
+    const testCommunication = { ...failedCommunication("test", "2026-08-22T12:00:00.000Z"), isTestData: true };
+    const testAppointment = appointment("test", "2026-08-22T12:00:00.000Z");
+    testAppointment.isTestData = true;
+    const issues = await loadAttentionIssues(source({
+      appointments: Promise.resolve([testAppointment]),
+      communications: Promise.resolve({ records: [testCommunication], currentPage: 1, totalPages: 1, totalRecords: 1 })
+    }), new Date("2026-08-22T14:00:00.000Z"));
+    expect(issues.map((issue) => issue.id)).not.toContain("communication-failed:test");
+    expect(issues.map((issue) => issue.id)).not.toContain("appointment-awaiting-review:test");
   });
 });

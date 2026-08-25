@@ -9,6 +9,7 @@ function readChain(result: { data: unknown; error: unknown }) {
   const chain = {
     select: vi.fn(() => chain),
     eq: vi.fn(() => chain),
+    is: vi.fn(() => chain),
     maybeSingle: vi.fn(async () => result),
     update: vi.fn(() => { throw new Error("read boundary must not update"); }),
     insert: vi.fn(() => { throw new Error("read boundary must not insert"); }),
@@ -31,6 +32,7 @@ describe("repository.getCommunicationRetryTarget", () => {
     expect(chain.eq).toHaveBeenNthCalledWith(1, "id", "message-1");
     expect(chain.eq).toHaveBeenNthCalledWith(2, "organization_id", "org-1");
     expect(chain.eq).toHaveBeenNthCalledWith(3, "status", "failed");
+    expect(chain.is).toHaveBeenCalledWith("archived_at", null);
     expect(chain.maybeSingle).toHaveBeenCalledOnce();
   });
 

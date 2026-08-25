@@ -142,6 +142,7 @@ const appointments: AppointmentRequest[] = [
     preferredTime: "14:00",
     urgency: "same_day",
     administrativeNotes: "Development data: sample request for local admin testing.",
+    isTestData: true,
     createdAt: now,
     updatedAt: now
   }
@@ -245,6 +246,7 @@ export const devStore = {
       preferredTime: input.preferredTime,
       urgency: input.urgency,
       administrativeNotes: input.administrativeNotes ?? null,
+      isTestData: false,
       createdAt: timestamp,
       updatedAt: timestamp
     };

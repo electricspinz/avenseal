@@ -202,7 +202,7 @@ export async function processCommunicationBatch(supabase: SupabaseClient, option
   const batchSize = Math.min(Math.max(options.batchSize ?? 10, 1), 50);
   const staleBefore = new Date(Date.now() - (options.processingTimeoutMinutes ?? 10) * 60_000).toISOString();
   const now = new Date().toISOString();
-  const { data, error } = await supabase.from("communication_messages").select("*").in("status", ["queued", "failed", "processing"]).order("created_at").limit(batchSize * 3);
+  const { data, error } = await supabase.from("communication_messages").select("*").in("status", ["queued", "failed", "processing"]).is("archived_at", null).order("created_at").limit(batchSize * 3);
   if (error) throw error;
   const candidates = ((data ?? []) as QueueRow[]).filter((message) =>
     message.status === "queued" ||

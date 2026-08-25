@@ -53,6 +53,7 @@ import type {
   PaymentStatus
 } from "@/lib/types";
 import type { BookingInput, OrganizationSettingsInput } from "@/lib/validation";
+import type { ProductionCutover } from "@/lib/server/action-required-eligibility";
 
 type SupabaseRow = Record<string, unknown>;
 function mapFloridaRonProductionAttempt(row: Record<string, unknown>): FloridaRonProductionAttempt { return { id: String(row.id), organizationId: String(row.organization_id), appointmentId: String(row.appointment_request_id), preparedSessionId: String(row.prepared_session_id), workflowVersion: String(row.workflow_version), preparedParameters: row.prepared_parameters as FloridaRonPrepareInput, modules: row.module_versions as FloridaRonModule[], state: row.state as ProductionAttemptState, currentModuleIndex: Number(row.current_module_index), stopReason: row.stop_reason as AssistantStopReason | null, createdBy: String(row.created_by), createdAt: String(row.created_at), startedAt: String(row.started_at), terminalAt: row.terminal_at ? String(row.terminal_at) : null }; }
@@ -215,6 +216,7 @@ type SupabaseAppointmentRow = {
   preferred_time: string;
   urgency: AppointmentRequest["urgency"];
   administrative_notes: string | null;
+  is_test_data?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -252,6 +254,7 @@ function mapAppointment(row: SupabaseAppointmentRow): AppointmentRequest {
     preferredTime: normalizeTime(row.preferred_time),
     urgency: row.urgency,
     administrativeNotes: row.administrative_notes,
+    isTestData: Boolean(row.is_test_data),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -433,7 +436,8 @@ function mapAdminCommunication(row: SupabaseRow): AdminCommunication {
     providerMessageId: stringOrNull(row.provider_message_id),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
-    archivedAt: stringOrNull(row.archived_at)
+    archivedAt: stringOrNull(row.archived_at),
+    isTestData: Boolean(row.is_test_data)
   };
 }
 
@@ -1502,6 +1506,7 @@ export const repository = {
       .eq("id", id)
       .eq("organization_id", organizationId)
       .eq("status", "failed")
+      .is("archived_at", null)
       .select("id")
       .maybeSingle();
     if (error) throw error;
@@ -1516,6 +1521,7 @@ export const repository = {
       .eq("id", input.communicationId)
       .eq("organization_id", input.organizationId)
       .eq("status", "failed")
+      .is("archived_at", null)
       .maybeSingle();
     if (error) throw error;
     return data ? { id: String(data.id), retryEligible: String(data.status) === "failed" } : null;
@@ -1882,6 +1888,17 @@ export const repository = {
   },
   async getSettings() {
     return loadOrganizationSettings();
+  },
+  async getProductionCutover(): Promise<ProductionCutover> {
+    if (!hasSupabaseServiceConfig()) return { productionCutoverAt: null };
+    const organizationId = await resolvePublicOrganizationId();
+    const { data, error } = await getSupabaseAdmin()
+      .from("organization_operational_cutovers")
+      .select("production_cutover_at")
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (error && error.code !== "PGRST205") throw error;
+    return { productionCutoverAt: data?.production_cutover_at ? String(data.production_cutover_at) : null };
   },
   async getOrganizationSettings() {
     return repository.getSettings();
